@@ -1,0 +1,606 @@
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
+import { SocialPost, UserStory, PostComment, StorySlide } from '../types';
+
+const INITIAL_POSTS: SocialPost[] = [];
+const INITIAL_STORIES: UserStory[] = [];
+import { offlineStorage, STORAGE_KEYS } from '../services/offlineStorage';
+import { notificationService } from '../services/notifications';
+import { soundEffects } from '../services/audio';
+import { api } from '../services/api';
+import { useAuth } from './AuthContext';
+
+interface SocialContextType {
+  posts: SocialPost[];
+  stories: UserStory[];
+  savedPostIds: string[];
+  createPost: (content: string, mediaUrls: string[], tags: string[], location?: string) => Promise<void>;
+  likePost: (postId: string) => Promise<void>;
+  addComment: (postId: string, content: string) => Promise<void>;
+  deletePost: (postId: string) => Promise<void>;
+  editPost: (postId: string, content: string, mediaUrls: string[], tags: string[], location?: string) => Promise<void>;
+  toggleSavePost: (postId: string) => Promise<void>;
+  addStory: (mediaUrl: string, caption?: string) => Promise<void>;
+  deleteStory: (storyId: string) => Promise<void>;
+  deleteStorySlide: (storyId: string, slideId: string) => Promise<void>;
+  markStorySeen: (storyId: string) => Promise<void>;
+  getPostById: (postId: string) => SocialPost | undefined;
+  refreshFeed: () => Promise<void>;
+}
+
+const SocialContext = createContext<SocialContextType | undefined>(undefined);
+
+export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
+  const userRef = useRef(user);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const [posts, setPosts] = useState<SocialPost[]>(() => {
+    const loaded = offlineStorage.load<SocialPost[]>(STORAGE_KEYS.POSTS, []);
+    return (loaded || []).filter(
+      (p) =>
+        p &&
+        !['user_alex', 'user_maya', 'user_liam', 'user_elena'].includes(p.authorId) &&
+        !['post_1', 'post_2', 'post_3'].includes(p.id)
+    );
+  });
+
+  const [stories, setStories] = useState<UserStory[]>(() => {
+    const loaded = offlineStorage.load<UserStory[]>(STORAGE_KEYS.STORIES, []);
+    return (loaded || []).filter(
+      (s) =>
+        s &&
+        !['user_alex', 'user_maya', 'user_liam', 'user_elena'].includes(s.userId) &&
+        !['story_1', 'story_2', 'story_3'].includes(s.id)
+    );
+  });
+
+  const [savedPostIds, setSavedPostIds] = useState<string[]>(() => {
+    return offlineStorage.load<string[]>(STORAGE_KEYS.BOOKMARKS, []).filter((id) => !id.startsWith('post_'));
+  });
+
+  // Fetch posts & stories from server API with smart real-time merging
+  const refreshFeed = async () => {
+    try {
+      const [serverPosts, serverStories] = await Promise.all([api.getPosts(), api.getStories()]);
+      if (Array.isArray(serverPosts)) {
+        const cleanServerPosts = serverPosts.filter(
+          (p) =>
+            p &&
+            !['user_alex', 'user_maya', 'user_liam', 'user_elena'].includes(p.authorId) &&
+            !['post_1', 'post_2', 'post_3'].includes(p.id)
+        );
+        setPosts((prevPosts) => {
+          // Merge server posts with any optimistic local posts
+          const serverMap = new Map<string, SocialPost>();
+          cleanServerPosts.forEach((sp) => serverMap.set(sp.id, sp));
+
+          // Include any pending offline posts that are not yet on the server
+          const merged: SocialPost[] = [];
+          const seenIds = new Set<string>();
+
+          // Server posts take canonical precedence for comments and likes
+          cleanServerPosts.forEach((sp) => {
+            seenIds.add(sp.id);
+            merged.push(sp);
+          });
+
+          // Check if local has any temp/offline pending posts
+          prevPosts.forEach((lp) => {
+            if (lp.isPendingSync && !seenIds.has(lp.id)) {
+              merged.unshift(lp);
+            }
+          });
+
+          return merged;
+        });
+        offlineStorage.save(STORAGE_KEYS.POSTS, cleanServerPosts);
+      }
+
+      if (Array.isArray(serverStories)) {
+        const cleanStories = serverStories.filter(
+          (s) =>
+            s &&
+            !['user_alex', 'user_maya', 'user_liam', 'user_elena'].includes(s.userId) &&
+            !['story_1', 'story_2', 'story_3'].includes(s.id)
+        );
+        const STORY_CUTOFF = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const currentUser = userRef.current || user;
+
+        setStories((prev) => {
+          const serverMap = new Map<string, UserStory>();
+          cleanStories.forEach((s) => {
+            if (s.userId) serverMap.set(s.userId, s);
+          });
+
+          // Preserve any active stories from local state (including optimistic or pending-sync stories)
+          prev.forEach((localStory) => {
+            if (!localStory || !localStory.userId) return;
+            // Discard stories older than 24 hours
+            if (now - localStory.createdAt >= STORY_CUTOFF) return;
+
+            const existingServer = serverMap.get(localStory.userId);
+            if (!existingServer) {
+              // Server doesn't have it yet (in-flight or offline). Preserve it!
+              serverMap.set(localStory.userId, localStory);
+
+              // If pending sync and matches current user, retry in background
+              if (localStory.isPendingSync && currentUser && localStory.userId === currentUser.id) {
+                api.createStory(
+                  currentUser.id,
+                  localStory.mediaUrl,
+                  localStory.caption,
+                  currentUser.name,
+                  currentUser.avatarUrl
+                )
+                  .then((synced) => {
+                    if (synced) {
+                      setStories((current) =>
+                        current.map((st) => (st.userId === currentUser.id ? { ...synced, isPendingSync: false } : st))
+                      );
+                    }
+                  })
+                  .catch(() => {});
+              }
+            } else {
+              // Server has the story, but merge any slides that exist locally and aren't on server yet
+              const existingSlideIds = new Set((existingServer.slides || []).map((sl) => sl.id));
+              const existingSlideUrls = new Set((existingServer.slides || []).map((sl) => sl.mediaUrl));
+              const mergedSlides = [...(existingServer.slides || [])];
+
+              if (localStory.slides && localStory.slides.length > 0) {
+                for (const sl of localStory.slides) {
+                  if (!existingSlideIds.has(sl.id) && !existingSlideUrls.has(sl.mediaUrl)) {
+                    existingSlideIds.add(sl.id);
+                    existingSlideUrls.add(sl.mediaUrl);
+                    mergedSlides.push(sl);
+                  }
+                }
+              }
+
+              // Sort slides chronologically
+              mergedSlides.sort((a, b) => a.createdAt - b.createdAt);
+
+              const isLocalNewer = localStory.createdAt > existingServer.createdAt;
+              serverMap.set(localStory.userId, {
+                ...existingServer,
+                slides: mergedSlides,
+                mediaUrl: isLocalNewer ? (localStory.mediaUrl || existingServer.mediaUrl) : (existingServer.mediaUrl || localStory.mediaUrl),
+                caption: isLocalNewer ? (localStory.caption || existingServer.caption) : (existingServer.caption || localStory.caption),
+                createdAt: Math.max(existingServer.createdAt, localStory.createdAt),
+                seenByUserIds: Array.from(new Set([...(existingServer.seenByUserIds || []), ...(localStory.seenByUserIds || [])])),
+              });
+            }
+          });
+
+          const combined = Array.from(serverMap.values()).filter(
+            (s) => now - s.createdAt < STORY_CUTOFF
+          );
+          offlineStorage.save(STORAGE_KEYS.STORIES, combined);
+          return combined;
+        });
+      }
+    } catch (err) {
+      console.warn('Feed refresh error:', err);
+    }
+  };
+
+
+  useEffect(() => {
+    refreshFeed();
+    // Real-time cross-device sync interval (every 2.5 seconds)
+    const interval = setInterval(refreshFeed, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Save to offline storage
+  useEffect(() => {
+    offlineStorage.save(STORAGE_KEYS.POSTS, posts);
+  }, [posts]);
+
+  useEffect(() => {
+    offlineStorage.save(STORAGE_KEYS.STORIES, stories);
+  }, [stories]);
+
+  useEffect(() => {
+    offlineStorage.save(STORAGE_KEYS.BOOKMARKS, savedPostIds);
+  }, [savedPostIds]);
+
+  // Listen to cross-tab updates
+  useEffect(() => {
+    const unsub = offlineStorage.onBroadcastEvent(({ type, payload }) => {
+      if (type === 'new_post') {
+        setPosts((prev) => [payload, ...prev.filter((p) => p.id !== payload.id)]);
+      } else if (type === 'post_liked') {
+        setPosts((prev) =>
+          prev.map((p) => (p.id === payload.postId ? { ...p, likesCount: payload.likesCount, likedByUserIds: payload.likedByUserIds } : p))
+        );
+      } else if (type === 'new_comment') {
+        setPosts((prev) =>
+          prev.map((p) => {
+            if (p.id === payload.postId) {
+              const comments = p.comments || [];
+              if (comments.some((c) => c.id === payload.comment.id)) {
+                return p;
+              }
+              return {
+                ...p,
+                commentsCount: comments.length + 1,
+                comments: [...comments, payload.comment],
+              };
+            }
+            return p;
+          })
+        );
+      } else if (type === 'new_story') {
+        setStories((prev) => {
+          const existingIdx = prev.findIndex((s) => s.userId === payload.userId || s.id === payload.id);
+          if (existingIdx !== -1) {
+            const updated = [...prev];
+            updated[existingIdx] = payload;
+            return updated;
+          }
+          return [payload, ...prev];
+        });
+      } else if (type === 'delete_story') {
+        setStories((prev) => prev.filter((s) => s.id !== payload.storyId));
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const createPost = async (content: string, mediaUrls: string[], tags: string[], location?: string) => {
+    if (!user) return;
+
+    const newPostData = {
+      authorId: user.id,
+      authorName: user.name,
+      authorHandle: user.handle,
+      authorAvatar: user.avatarUrl,
+      content,
+      mediaUrls,
+      tags,
+      location,
+    };
+
+    // Optimistic UI update
+    const tempPost: SocialPost = {
+      ...newPostData,
+      id: 'post_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      likesCount: 0,
+      likedByUserIds: [],
+      commentsCount: 0,
+      comments: [],
+      sharesCount: 0,
+      savedByUserIds: [],
+      createdAt: Date.now(),
+    };
+
+    setPosts((prev) => [tempPost, ...prev]);
+
+    // Save to server database
+    const savedServerPost = await api.createPost(newPostData);
+    if (savedServerPost) {
+      setPosts((prev) => [savedServerPost, ...prev.filter((p) => p.id !== tempPost.id)]);
+      offlineStorage.broadcastEvent('new_post', savedServerPost);
+    } else {
+      offlineStorage.broadcastEvent('new_post', tempPost);
+    }
+
+    notificationService.notify({
+      type: 'system',
+      title: 'Post Published',
+      body: 'Your photo and thoughts are saved in the server database ✨',
+      avatar: user.avatarUrl,
+      playSound: false,
+    });
+  };
+
+  const likePost = async (postId: string) => {
+    if (!user) return;
+    
+    // Find post first to do side effects safely outside state updater
+    const post = posts.find((p) => p.id === postId);
+    if (post) {
+      const isLiked = post.likedByUserIds.includes(user.id);
+      if (!isLiked) {
+        soundEffects.playLikeSparkle();
+        try {
+          confetti({
+            particleCount: 25,
+            spread: 40,
+            origin: { y: 0.8 },
+            colors: ['#ec4899', '#8b5cf6', '#3b82f6'],
+          });
+        } catch (e) {}
+
+        /* Outgoing like notification handled by server for recipient only */
+      }
+    }
+
+    // Optimistic update
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const isLiked = p.likedByUserIds.includes(user.id);
+          const updatedLikes = isLiked
+            ? p.likedByUserIds.filter((id) => id !== user.id)
+            : [...p.likedByUserIds, user.id];
+          const newCount = isLiked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1;
+          
+          const updatedPost = {
+            ...p,
+            likesCount: newCount,
+            likedByUserIds: updatedLikes,
+          };
+          
+          offlineStorage.broadcastEvent('post_liked', {
+            postId: p.id,
+            likesCount: newCount,
+            likedByUserIds: updatedLikes,
+          });
+          
+          return updatedPost;
+        }
+        return p;
+      })
+    );
+
+    // Call server
+    await api.likePost(postId, user.id);
+  };
+
+  const addComment = async (postId: string, content: string) => {
+    if (!user || !content.trim()) return;
+
+    const newComment: PostComment = {
+      id: 'comment_' + Date.now(),
+      postId,
+      authorId: user.id,
+      authorName: user.name,
+      authorAvatar: user.avatarUrl,
+      content: content.trim(),
+      createdAt: Date.now(),
+      likesCount: 0,
+      likedByUserIds: [],
+    };
+
+    const post = posts.find((p) => p.id === postId);
+    /* Outgoing comment notification handled by server for recipient only */
+
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          const updated = {
+            ...p,
+            commentsCount: p.commentsCount + 1,
+            comments: [...(p.comments || []), newComment],
+          };
+
+          offlineStorage.broadcastEvent('new_comment', {
+            postId,
+            comment: newComment,
+          });
+
+          return updated;
+        }
+        return p;
+      })
+    );
+
+    soundEffects.playMessageSent();
+    await api.addComment(postId, user.id, content.trim());
+  };
+
+  const deletePost = async (postId: string) => {
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+    await api.deletePost(postId);
+  };
+
+  const editPost = async (postId: string, content: string, mediaUrls: string[], tags: string[], location?: string) => {
+    const updates = { content, mediaUrls, tags, location };
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, ...updates } : p))
+    );
+    await api.editPost(postId, updates);
+  };
+
+  const toggleSavePost = async (postId: string) => {
+    if (!user) return;
+    setSavedPostIds((prev) => {
+      if (prev.includes(postId)) {
+        return prev.filter((id) => id !== postId);
+      } else {
+        return [...prev, postId];
+      }
+    });
+    await api.bookmarkPost(postId, user.id);
+  };
+
+  const addStory = async (mediaUrl: string, caption?: string) => {
+    const currentUser = userRef.current || user;
+    if (!currentUser) return;
+    const now = Date.now();
+    const slideId = 'slide_' + now + '_' + Math.random().toString(36).substr(2, 4);
+    const newSlide: StorySlide = {
+      id: slideId,
+      mediaUrl,
+      caption,
+      createdAt: now,
+    };
+
+    // Optimistic UI update: Check if user already has an active story
+    setStories((prev) => {
+      const existingIndex = prev.findIndex((s) => s.userId === currentUser.id);
+      if (existingIndex !== -1) {
+        const existing = prev[existingIndex];
+        const existingSlides =
+          existing.slides && existing.slides.length > 0
+            ? [...existing.slides]
+            : [
+                {
+                  id: `slide_${existing.id}`,
+                  mediaUrl: existing.mediaUrl,
+                  caption: existing.caption,
+                  createdAt: existing.createdAt,
+                },
+              ];
+
+        const updatedStory: UserStory = {
+          ...existing,
+          userName: currentUser.name || existing.userName,
+          userAvatar: currentUser.avatarUrl || existing.userAvatar,
+          mediaUrl,
+          caption,
+          createdAt: now,
+          seenByUserIds: [currentUser.id],
+          slides: [...existingSlides, newSlide],
+          isPendingSync: true,
+        };
+        const updated = [...prev];
+        updated[existingIndex] = updatedStory;
+        offlineStorage.save(STORAGE_KEYS.STORIES, updated);
+        return updated;
+      } else {
+        const newStory: UserStory = {
+          id: 'story_' + now + '_' + Math.random().toString(36).substr(2, 4),
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userAvatar: currentUser.avatarUrl,
+          mediaUrl,
+          caption,
+          createdAt: now,
+          seenByUserIds: [currentUser.id],
+          slides: [newSlide],
+          isPendingSync: true,
+        };
+        const updated = [newStory, ...prev];
+        offlineStorage.save(STORAGE_KEYS.STORIES, updated);
+        return updated;
+      }
+    });
+
+    notificationService.notify({
+      type: 'system',
+      title: 'Story Added',
+      body: 'Your photo was added to your story reel!',
+      avatar: currentUser.avatarUrl,
+      playSound: false,
+    });
+
+    try {
+      const savedStory = await api.createStory(
+        currentUser.id,
+        mediaUrl,
+        caption,
+        currentUser.name,
+        currentUser.avatarUrl
+      );
+      if (savedStory) {
+        setStories((prev) => {
+          const idx = prev.findIndex((s) => s.userId === currentUser.id || s.id === savedStory.id);
+          const resolved = { ...savedStory, isPendingSync: false };
+          if (idx !== -1) {
+            const updated = [...prev];
+            updated[idx] = resolved;
+            offlineStorage.save(STORAGE_KEYS.STORIES, updated);
+            return updated;
+          }
+          const updated = [resolved, ...prev];
+          offlineStorage.save(STORAGE_KEYS.STORIES, updated);
+          return updated;
+        });
+        offlineStorage.broadcastEvent('new_story', savedStory);
+      }
+    } catch (err) {
+      console.warn('Error saving story to server, keeping in optimistic offline reel:', err);
+    }
+  };
+
+  const deleteStory = async (storyId: string) => {
+    if (!user) return;
+    setStories((prev) => prev.filter((s) => s.id !== storyId));
+    offlineStorage.broadcastEvent('delete_story', { storyId });
+    await api.deleteStory(storyId, user.id);
+  };
+
+  const deleteStorySlide = async (storyId: string, slideId: string) => {
+    if (!user) return;
+    setStories((prev) => {
+      return prev
+        .map((s) => {
+          if (s.id === storyId) {
+            if (s.slides && s.slides.length > 1) {
+              const updatedSlides = s.slides.filter((sl) => sl.id !== slideId);
+              const last = updatedSlides[updatedSlides.length - 1];
+              return {
+                ...s,
+                mediaUrl: last.mediaUrl,
+                caption: last.caption,
+                slides: updatedSlides,
+              };
+            } else {
+              return null;
+            }
+          }
+          return s;
+        })
+        .filter(Boolean) as UserStory[];
+    });
+    const updated = await api.deleteStorySlide(storyId, slideId, user.id);
+    if (updated) {
+      offlineStorage.broadcastEvent('new_story', updated);
+    }
+  };
+
+  const markStorySeen = async (storyId: string) => {
+    if (!user) return;
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id === storyId && !s.seenByUserIds.includes(user.id)) {
+          return { ...s, seenByUserIds: [...s.seenByUserIds, user.id] };
+        }
+        return s;
+      })
+    );
+    await api.markStorySeen(storyId, user.id);
+  };
+
+  const getPostById = (postId: string) => {
+    return posts.find((p) => p.id === postId);
+  };
+
+  return (
+    <SocialContext.Provider
+      value={{
+        posts,
+        stories,
+        savedPostIds,
+        createPost,
+        likePost,
+        addComment,
+        deletePost,
+        editPost,
+        toggleSavePost,
+        addStory,
+        deleteStory,
+        deleteStorySlide,
+        markStorySeen,
+        getPostById,
+        refreshFeed,
+      }}
+    >
+      {children}
+    </SocialContext.Provider>
+  );
+};
+
+export const useSocial = () => {
+  const context = useContext(SocialContext);
+  if (!context) throw new Error('useSocial must be used within a SocialProvider');
+  return context;
+};

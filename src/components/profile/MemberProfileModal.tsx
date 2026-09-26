@@ -1,0 +1,555 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  X,
+  MessageSquare,
+  Video,
+  Phone,
+  UserPlus,
+  UserCheck,
+  Share2,
+  Sparkles,
+  ShieldCheck,
+  Radio,
+  FileText,
+  Activity,
+  Heart,
+  MessageCircle,
+  Clock,
+  Maximize2,
+  MapPin,
+  Calendar,
+  CheckCircle2,
+  Globe,
+  Tag,
+  Zap,
+} from 'lucide-react';
+import { UserProfile } from '../../types';
+import { useAuth } from '../../context/AuthContext';
+import { useChat } from '../../context/ChatContext';
+import { useCall } from '../../context/CallContext';
+import { useSocial } from '../../context/SocialContext';
+import { Avatar } from '../common/Avatar';
+import { formatDistanceToNow } from 'date-fns';
+import { DEFAULT_PRESET_COVER } from '../../content/presetImages';
+import { StoryViewerModal } from '../stories/StoryViewerModal';
+
+interface MemberProfileModalProps {
+  userId: string;
+  onClose: () => void;
+  onOpenSelfEdit?: () => void;
+}
+
+const DEFAULT_COVER_IMAGE = DEFAULT_PRESET_COVER;
+
+export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
+  userId,
+  onClose,
+  onOpenSelfEdit,
+}) => {
+  const { user: currentUser, allUsers, followUser } = useAuth();
+  const { startDirectConversation, setActiveConversationId } = useChat();
+  const { startCall } = useCall();
+  const { posts, likePost, stories } = useSocial();
+
+  const [activeTab, setActiveTab] = useState<'posts' | 'about'>('posts');
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const [viewStory, setViewStory] = useState(false);
+
+  const targetUser = allUsers.find((u) => u.id === userId);
+
+  if (!targetUser) return null;
+
+  const isSelf = currentUser?.id === targetUser.id;
+  const isFollowing = currentUser?.followingUserIds?.includes(targetUser.id);
+  const isOnline = targetUser.status === 'online';
+  const isBusy = targetUser.status === 'busy';
+
+  // Filter posts by this user
+  const userPosts = posts.filter((p) => p.authorId === targetUser.id);
+  
+  // Find active story
+  const targetStoryIndex = (stories || []).findIndex((s) => s.userId === targetUser.id);
+  const hasActiveStory = targetStoryIndex !== -1;
+
+  const handleToggleFollow = async () => {
+    if (isFollowLoading) return;
+    setIsFollowLoading(true);
+    try {
+      await followUser(targetUser.id);
+    } finally {
+      setIsFollowLoading(false);
+    }
+  };
+
+  const handleStartMessage = async () => {
+    const conv = await startDirectConversation(targetUser);
+    setActiveConversationId(conv.id);
+    onClose();
+  };
+
+  const handleStartCall = (isVideo: boolean) => {
+    onClose();
+    startCall(targetUser, isVideo);
+  };
+
+  const handleShareProfile = () => {
+    const url = `${window.location.origin}/?user=${targetUser.id}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
+
+  const coverUrl = targetUser.bannerUrl || DEFAULT_COVER_IMAGE;
+
+  return (
+    <div
+      id="member-profile-modal"
+      onClick={onClose}
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-xl animate-fade-in select-none flex flex-col p-3 sm:p-5"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: 15 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg m-auto bg-[#0c1024]/95 border border-white/20 rounded-[32px] shadow-2xl overflow-hidden flex flex-col"
+      >
+        {/* Full Image Zoom Lightbox Overlay */}
+        <AnimatePresence>
+          {zoomImage && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setZoomImage(null)}
+              className="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 cursor-zoom-out"
+            >
+              <button
+                onClick={() => setZoomImage(null)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              {zoomImage && zoomImage.trim() ? (
+                <img
+                  src={zoomImage.trim()}
+                  alt="Full View"
+                  className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl border border-white/20"
+                />
+              ) : null}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Unified Scrollable Container: Banner and Profile Content together so Avatar is NEVER cut off */}
+        <div className="flex-1 flex flex-col">
+          {/* Banner Section */}
+          <div className="relative h-44 sm:h-52 w-full bg-slate-900 overflow-hidden flex-shrink-0 group">
+            <img
+              src={(coverUrl && coverUrl.trim()) || DEFAULT_COVER_IMAGE}
+              alt="Cover Banner"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+              onClick={() => setZoomImage(coverUrl)}
+            />
+
+            {/* Gradient shading for text legibility */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0c1024] via-transparent to-black/30 pointer-events-none" />
+
+            {/* Banner expand button */}
+            <button
+              type="button"
+              onClick={() => setZoomImage(coverUrl)}
+              className="absolute top-3.5 left-3.5 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 shadow-lg z-20 transition-all opacity-0 group-hover:opacity-100"
+              title="View Full Cover Image"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Close Modal Button */}
+            <button
+              id="close-member-profile-btn"
+              type="button"
+              onClick={onClose}
+              className="absolute top-3.5 right-3.5 p-2.5 rounded-full bg-black/60 hover:bg-black/90 text-white transition-all backdrop-blur-md border border-white/20 shadow-xl z-20"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Profile Content Body */}
+          {/* Optional: Add a text prompt for their story */}
+          {hasActiveStory && (
+            <div className="px-5 sm:px-6 mb-2">
+              <button
+                onClick={() => setViewStory(true)}
+                className="w-full flex items-center justify-between p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all text-amber-300 shadow-inner group"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full border-2 border-amber-400 p-0.5 overflow-hidden">
+                    <img src={targetUser.avatarUrl} alt={targetUser.name} className="w-full h-full object-cover rounded-full" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-bold leading-tight group-hover:text-amber-200 transition-colors">Watch {targetUser.name.split(' ')[0]}'s Story</p>
+                    <p className="text-[10px] opacity-70">Active right now</p>
+                  </div>
+                </div>
+                <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Maximize2 className="w-3 h-3 text-amber-400" />
+                </div>
+              </button>
+            </div>
+          )}
+
+          <div className="px-5 sm:px-6 pb-6 pt-0 flex-1">
+            {/* Avatar & Action Buttons Bar */}
+            <div className="flex items-end justify-between -mt-16 sm:-mt-20 mb-4 relative z-20">
+              {/* Full Unclipped Circular Avatar with Ring */}
+              <div
+                className="relative cursor-pointer group"
+                onClick={() => {
+                  if (hasActiveStory) {
+                    setViewStory(true);
+                  } else {
+                    setZoomImage(targetUser.avatarUrl);
+                  }
+                }}
+                title={hasActiveStory ? "View Active Story" : "Click to view full photo"}
+              >
+                <div className={`p-1.5 rounded-full bg-[#0c1024] shadow-2xl ${hasActiveStory ? 'ring-4 ring-amber-500 ring-offset-2 ring-offset-[#0c1024]' : 'ring-4 ring-[#0c1024]'}`}>
+                  <Avatar
+                    src={targetUser.avatarUrl}
+                    name={targetUser.name}
+                    size="2xl"
+                    className="group-hover:opacity-90 transition-opacity"
+                  />
+                </div>
+
+                {/* Online indicator badge */}
+                <span
+                  className={`absolute bottom-2 right-2 w-4 h-4 rounded-full border-2 border-[#0c1024] shadow-md ${
+                    isOnline
+                      ? 'bg-emerald-400 ring-2 ring-emerald-500/40'
+                      : isBusy
+                      ? 'bg-amber-400 ring-2 ring-amber-500/40'
+                      : 'bg-slate-500'
+                  }`}
+                  title={targetUser.status}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {isSelf ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenSelfEdit?.();
+                    }}
+                    className="px-4 py-2 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-lg shadow-amber-500/25"
+                  >
+                    Edit Profile
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      id="member-follow-btn"
+                      type="button"
+                      onClick={handleToggleFollow}
+                      disabled={isFollowLoading}
+                      className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-2xl text-xs font-bold transition-all shadow-md ${
+                        isFollowing
+                          ? 'bg-white/10 hover:bg-red-500/20 hover:text-red-300 text-white border border-white/20'
+                          : 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-500/25'
+                      }`}
+                    >
+                      {isFollowing ? (
+                        <>
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Following</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Follow</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      id="member-msg-btn"
+                      type="button"
+                      onClick={handleStartMessage}
+                      className="p-2 sm:p-2.5 rounded-2xl bg-white/10 hover:bg-amber-600 text-white transition-all border border-white/15 shadow-md"
+                      title="Send Message"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      id="member-videocall-btn"
+                      type="button"
+                      onClick={() => handleStartCall(true)}
+                      className="p-2 sm:p-2.5 rounded-2xl bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-white transition-all border border-emerald-500/30 shadow-md"
+                      title="Start Video Call"
+                    >
+                      <Video className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      id="member-audiocall-btn"
+                      type="button"
+                      onClick={() => handleStartCall(false)}
+                      className="p-2 sm:p-2.5 rounded-2xl bg-yellow-600/30 hover:bg-yellow-500 text-yellow-300 hover:text-white transition-all border border-yellow-500/30 shadow-md"
+                      title="Start Voice Call"
+                    >
+                      <Phone className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleShareProfile}
+                  className="p-2 sm:p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white transition-all border border-white/15"
+                  title="Share Profile"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {copiedLink && (
+              <div className="mb-3 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold text-center animate-fade-in">
+                Profile link copied to clipboard!
+              </div>
+            )}
+
+            {/* User Name & Info */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xl sm:text-2xl font-extrabold text-white">{targetUser.name}</h3>
+                {targetUser.isVerified && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                    <Sparkles className="w-3 h-3 fill-amber-400/30 text-amber-400" />
+                    Verified
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 flex-wrap">
+                <span>@{targetUser.handle}</span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Radio className={`w-3 h-3 ${isOnline ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
+                  <span className="capitalize">{targetUser.status}</span>
+                </span>
+                {targetUser.statusMessage && (
+                  <>
+                    <span>•</span>
+                    <span className="text-slate-300 italic">{targetUser.statusMessage}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Bio Card */}
+            {targetUser.bio && (
+              <div className="mb-4 bg-white/[0.04] p-3.5 rounded-2xl border border-white/10">
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+                  {targetUser.bio}
+                </p>
+              </div>
+            )}
+
+            {/* Stats Bar */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5 p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-center">
+              <div>
+                <p className="text-base sm:text-lg font-extrabold text-white">{userPosts.length}</p>
+                <p className="text-[11px] text-slate-400 font-medium">Posts</p>
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-extrabold text-white">{targetUser.followersCount || 0}</p>
+                <p className="text-[11px] text-slate-400 font-medium">Followers</p>
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-extrabold text-white">{targetUser.followingCount || 0}</p>
+                <p className="text-[11px] text-slate-400 font-medium">Following</p>
+              </div>
+            </div>
+
+            {/* Tab Selector */}
+            <div className="flex border-b border-white/10 mb-4">
+              <button
+                type="button"
+                onClick={() => setActiveTab('posts')}
+                className={`flex-1 pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center justify-center gap-1.5 ${
+                  activeTab === 'posts'
+                    ? 'border-amber-500 text-amber-400'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Posts ({userPosts.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('about')}
+                className={`flex-1 pb-2.5 text-xs font-bold transition-all border-b-2 flex items-center justify-center gap-1.5 ${
+                  activeTab === 'about'
+                    ? 'border-amber-500 text-amber-400'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>About & Details</span>
+              </button>
+            </div>
+
+            {/* Tab 1: Posts by this User */}
+            {activeTab === 'posts' && (
+              <div className="space-y-3">
+                {userPosts.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs italic bg-white/[0.02] rounded-2xl border border-white/5 p-4">
+                    No posts published yet by {targetUser.name.split(' ')[0]}.
+                  </div>
+                ) : (
+                  userPosts.map((post) => (
+                    <div
+                      key={post.id}
+                      className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 hover:border-white/20 transition-all space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatDistanceToNow(post.createdAt, { addSuffix: true })}
+                        </span>
+                        {post.location && (
+                          <span className="flex items-center gap-1 text-amber-300 font-medium">
+                            <MapPin className="w-3 h-3 text-amber-400" />
+                            {post.location}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-white leading-relaxed whitespace-pre-line">{post.content}</p>
+
+                      {post.mediaUrls && post.mediaUrls[0] && post.mediaUrls[0].trim() && (
+                        <div className="rounded-xl overflow-hidden max-h-56 bg-black/40 border border-white/10">
+                          <img
+                            src={post.mediaUrls[0].trim()}
+                            alt="Post media"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-52 object-cover cursor-pointer hover:scale-105 transition-transform duration-300"
+                            onClick={() => setZoomImage(post.mediaUrls[0])}
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1 text-xs text-slate-400">
+                        <div className="flex items-center gap-4">
+                          <button
+                            type="button"
+                            onClick={() => likePost(post.id)}
+                            className={`flex items-center gap-1 transition-colors ${
+                              currentUser && post.likedByUserIds.includes(currentUser.id)
+                                ? 'text-pink-400 font-bold'
+                                : 'hover:text-white'
+                            }`}
+                          >
+                            <Heart
+                              className={`w-3.5 h-3.5 ${
+                                currentUser && post.likedByUserIds.includes(currentUser.id)
+                                  ? 'fill-pink-500 text-pink-500'
+                                  : ''
+                              }`}
+                            />
+                            <span>{post.likesCount}</span>
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            <MessageCircle className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{post.commentsCount || (post.comments ? post.comments.length : 0)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Tab 2: About & Details */}
+            {activeTab === 'about' && (
+              <div className="space-y-3 text-xs text-slate-300">
+                <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 space-y-2.5">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider text-slate-400">
+                    Profile Highlights
+                  </h4>
+                  <div className="flex items-center justify-between py-1 border-b border-white/5">
+                    <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      Member Since:
+                    </span>
+                    <span className="font-semibold text-white">{targetUser.joinedAt || 'August 2026'}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-white/5">
+                    <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                      Live Status:
+                    </span>
+                    <span className="font-semibold text-emerald-400 capitalize">{targetUser.status || 'Active'}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                      Identity Verification:
+                    </span>
+                    <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Verified User
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/40 to-yellow-950/40 border border-amber-500/25 text-amber-200">
+                  <div className="flex items-center gap-2 font-semibold mb-1 text-white">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    <span>Real-Time WebRTC Calling</span>
+                  </div>
+                  <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                    Direct phone and video calls with {targetUser.name} connect via peer-to-peer encryption with spatial audio and HD video.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Story Viewer Overlay */}
+      {viewStory && hasActiveStory && (
+        <StoryViewerModal
+          initialStoryIndex={targetStoryIndex}
+          onClose={() => setViewStory(false)}
+          onOpenChat={() => {
+            setViewStory(false);
+            onClose();
+            // Optional: Start conversation if not self
+            if (!isSelf) {
+              startDirectConversation(targetUser).then((conv) => {
+                if (conv?.id) setActiveConversationId(conv.id);
+              });
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+};
