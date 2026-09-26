@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? randomUUID() : 'aura-local-dev-session-key');
 const JWT_EXPIRY = '7d';
 
 export interface AuthUser {

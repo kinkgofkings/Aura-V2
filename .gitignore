@@ -1,24 +1,44 @@
+# Dependencies
 node_modules/
+
+# Production Build Artifacts
 build/
 dist/
-coverage/
-.DS_Store
-*.log
+dist.zip
+*.zip
+*.tar.gz
+*.apk
+
+# Environment Variables & Secrets (CRITICAL: Do NOT commit secrets to public view)
 .env*
 !.env.example
-.aider*
-*.db-wal
-*.db-shm
-*.bak*
+firebase-applet-config.json
 
-# Database & Uploads (root directory only)
+# Logs & Temporary files
+*.log
+.DS_Store
+.aider*
+*.bak*
+*.patch
+*.orig
+
+# Database, Wal & Local Runtime Storage
 /data/*.db
+/data/*.db-wal
+/data/*.db-shm
 /data/*.json
 /data/*.sqlite*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+
+# Dynamic User Uploads (keep gitkeep and default sample assets)
 public/uploads/*
 !public/uploads/.gitkeep
 !public/uploads/sermons/sermon_1790017344642_z4v6pa.jpg
 !public/courses/**
 !/src/content/**
 !/server/bible/**
+
 

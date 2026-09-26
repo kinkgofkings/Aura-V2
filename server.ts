@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { getLiveMinistryFeed } from "./services/youtubeFeedService";
 import webpush from "web-push";
 import express from 'express';
@@ -453,14 +454,13 @@ async function startServer() {
 
 
   // --- Web Push / Notification Setup ---
-  const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "BBAX1ipe_zcn6CoRkoW9a9cw65QRsBKRXKdhdzqxrY00PqpetVxtI7SJ7-ZTcQLozOzIwsL-Sg9D7U-qfERMxZs";
-  const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "OCB5cJ_HHQhpQX5kcRdf4jr_hMBhnGPdsV52v2M76SA";
-  const VAPID_MAILTO = process.env.VAPID_MAILTO || "mailto:admin@cloudcraftstudio.com";
-
-  webpush.setVapidDetails(VAPID_MAILTO, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-
+  // Keys are loaded from environment variables or dynamically generated/persisted in SQLite to keep secrets out of source code.
   const authDb = new Database(path.join(process.cwd(), "data", "auth.db"));
   authDb.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,
@@ -472,9 +472,38 @@ async function startServer() {
     CREATE INDEX IF NOT EXISTS idx_push_user_id ON push_subscriptions(user_id);
   `);
 
+  let vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+  let vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const VAPID_MAILTO = process.env.VAPID_MAILTO || "mailto:admin@webcraftstudio.cloud";
+
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    try {
+      const getPubKey = authDb.prepare("SELECT value FROM app_settings WHERE key = 'vapid_public_key'").get() as { value: string } | undefined;
+      const getPrivKey = authDb.prepare("SELECT value FROM app_settings WHERE key = 'vapid_private_key'").get() as { value: string } | undefined;
+
+      if (getPubKey && getPrivKey) {
+        vapidPublicKey = getPubKey.value;
+        vapidPrivateKey = getPrivKey.value;
+      } else {
+        const generated = webpush.generateVAPIDKeys();
+        vapidPublicKey = generated.publicKey;
+        vapidPrivateKey = generated.privateKey;
+        const insertSetting = authDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)");
+        insertSetting.run('vapid_public_key', vapidPublicKey);
+        insertSetting.run('vapid_private_key', vapidPrivateKey);
+      }
+    } catch {
+      const generated = webpush.generateVAPIDKeys();
+      vapidPublicKey = generated.publicKey;
+      vapidPrivateKey = generated.privateKey;
+    }
+  }
+
+  webpush.setVapidDetails(VAPID_MAILTO, vapidPublicKey, vapidPrivateKey);
+
   // Return Public Key to Client
   app.get("/api/push/vapid-key", (req, res) => {
-    res.json({ publicKey: VAPID_PUBLIC_KEY });
+    res.json({ publicKey: vapidPublicKey });
   });
 
   // Save Subscription from Client Device
@@ -745,8 +774,7 @@ async function startServer() {
     const query = ((req.query.query as string) || (req.query.q as string) || '').trim();
     const accessKey =
       process.env.PEXELS_API_KEY ||
-      process.env.VITE_PEXELS_API_KEY ||
-      'cY6ajm4oZeTHCoKHGCVYvizEkWs0KGf9VU4jJ8K50AKAmeESWfqk0rkM';
+      process.env.VITE_PEXELS_API_KEY;
 
     try {
       const endpoint = query

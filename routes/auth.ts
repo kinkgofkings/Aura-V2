@@ -3,6 +3,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 import { AuthService } from '../services/authService';
 import { db } from '../server/db';
 
@@ -14,7 +15,7 @@ export function createAuthRoutes(authService: AuthService): Router {
     const rawEmail = req.body.email;
     const rawUsername = req.body.username || req.body.handle;
     const rawDisplayName = req.body.displayName || req.body.name;
-    const rawPassword = req.body.password || 'TemporaryPassword123!';
+    const rawPassword = req.body.password || `Tmp_${randomUUID().replace(/-/g, '').slice(0, 12)}!9`;
     const avatarUrl = req.body.avatarUrl;
     const bio = req.body.bio;
 
