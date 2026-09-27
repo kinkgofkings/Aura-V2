@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserStatus } from '../types';
-import { auth, db, googleProvider, facebookProvider, githubProvider, signInAnonymously } from '../lib/firebase';
+import { auth, db, googleProvider, facebookProvider, githubProvider, signInAnonymously, isFirebaseConfigured } from '../lib/firebase';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
@@ -101,99 +101,138 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let unsubscribeUsers: (() => void) | undefined;
 
     // Handle redirect result for mobile web auth
-    getRedirectResult(auth).then(async (result) => {
-      if (result?.user) {
-        const providerId = result.user.providerData[0]?.providerId;
-        const authProvider = providerId === 'google.com' ? 'google' : providerId === 'facebook.com' ? 'facebook' : providerId === 'github.com' ? 'github' : 'email';
-        await syncFirebaseUserToDb(result.user, { authProvider });
-      }
-    }).catch((err) => {
-      console.error('Redirect auth error:', err);
-    });
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          // Listen to all users only when authenticated
-          const q = query(collection(db, 'users'));
-          unsubscribeUsers = onSnapshot(q, (snapshot) => {
-            const usersList: UserProfile[] = [];
-            snapshot.forEach((doc) => {
-              usersList.push({ id: doc.id, ...doc.data() } as UserProfile);
-            });
-            setAllUsers(usersList);
-          }, (err) => {
-            console.warn('Users snapshot listener warning:', err);
-          });
-
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
-          if (userDoc.exists()) {
-            const profileData = userDoc.data() as Omit<UserProfile, 'id'>;
-            const fullProfile: UserProfile = { 
-              id: firebaseUser.uid, 
-              ...profileData,
-              name: isTexAdmin ? 'Tex' : (profileData.name || firebaseUser.displayName || 'Believer'),
-              handle: isTexAdmin ? 'tex' : (profileData.handle || 'believer'),
-              isVerified: true
-            };
-            setUserAndCache(fullProfile);
-          } else {
-            // If no doc exists (e.g. newly signed up via social), create one
-            const newProfile: UserProfile = {
-              id: firebaseUser.uid,
-              name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'New User'),
-              email: firebaseUser.email || '',
-              handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
-              avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
-              bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
-              status: 'online',
-              followersCount: isTexAdmin ? 777 : 0,
-              followingCount: isTexAdmin ? 12 : 0,
-              isVerified: true,
-              joinedAt: new Date().toISOString(),
-              authProvider: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email'
-            };
-            await setDoc(userDocRef, newProfile);
-            setUserAndCache(newProfile);
+    if (isFirebaseConfigured && auth && typeof auth.onAuthStateChanged === 'function') {
+      try {
+        getRedirectResult(auth).then(async (result) => {
+          if (result?.user) {
+            const providerId = result.user.providerData[0]?.providerId;
+            const authProvider = providerId === 'google.com' ? 'google' : providerId === 'facebook.com' ? 'facebook' : providerId === 'github.com' ? 'github' : 'email';
+            await syncFirebaseUserToDb(result.user, { authProvider });
           }
-        } catch (dbErr) {
-          console.error('Error fetching/setting user profile in Firestore:', dbErr);
-          // Fallback to local profile constructed directly from firebaseUser
-          const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
-          const fallbackProfile: UserProfile = {
-            id: firebaseUser.uid,
-            name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'Believer'),
-            email: firebaseUser.email || '',
-            handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
-            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
-            bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
-            status: 'online',
-            followersCount: isTexAdmin ? 777 : 0,
-            followingCount: isTexAdmin ? 12 : 0,
-            isVerified: true,
-            joinedAt: new Date().toISOString(),
-            authProvider: (firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email')
-          };
-          setUserAndCache(fallbackProfile);
-        }
-      } else {
-        // If not signed into Firebase, preserve local guest or demo sessions
-        try {
-          const cached = localStorage.getItem('aura_cached_user');
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (parsed && (parsed.authProvider === 'guest' || parsed.authProvider === 'demo' || parsed.id?.startsWith('tex_'))) {
-              setUser(parsed);
-              return;
+        }).catch((err) => {
+          console.warn('Redirect auth check notice:', err);
+        });
+      } catch (e) {
+        console.warn('Redirect auth skipped:', e);
+      }
+    }
+
+    let unsubscribeAuth = () => {};
+    if (auth && typeof auth.onAuthStateChanged === 'function') {
+      try {
+        unsubscribeAuth = onAuthStateChanged(
+          auth,
+          async (firebaseUser) => {
+            if (firebaseUser) {
+              try {
+                if (isFirebaseConfigured && db && typeof db === 'object' && Object.keys(db).length > 0) {
+                  // Listen to all users only when authenticated
+                  const q = query(collection(db, 'users'));
+                  unsubscribeUsers = onSnapshot(q, (snapshot) => {
+                    const usersList: UserProfile[] = [];
+                    snapshot.forEach((doc) => {
+                      usersList.push({ id: doc.id, ...doc.data() } as UserProfile);
+                    });
+                    setAllUsers(usersList);
+                  }, (err) => {
+                    console.warn('Users snapshot listener warning:', err);
+                  });
+
+                  const userDocRef = doc(db, 'users', firebaseUser.uid);
+                  const userDoc = await getDoc(userDocRef);
+              
+                  const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
+                  if (userDoc.exists()) {
+                    const profileData = userDoc.data() as Omit<UserProfile, 'id'>;
+                    const fullProfile: UserProfile = { 
+                      id: firebaseUser.uid, 
+                      ...profileData,
+                      name: isTexAdmin ? 'Tex' : (profileData.name || firebaseUser.displayName || 'Believer'),
+                      handle: isTexAdmin ? 'tex' : (profileData.handle || 'believer'),
+                      isVerified: true
+                    };
+                    setUserAndCache(fullProfile);
+                  } else {
+                    // If no doc exists (e.g. newly signed up via social), create one
+                    const newProfile: UserProfile = {
+                      id: firebaseUser.uid,
+                      name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'New User'),
+                      email: firebaseUser.email || '',
+                      handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
+                      avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
+                      bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
+                      status: 'online',
+                      followersCount: isTexAdmin ? 777 : 0,
+                      followingCount: isTexAdmin ? 12 : 0,
+                      isVerified: true,
+                      joinedAt: new Date().toISOString(),
+                      authProvider: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email'
+                    };
+                    await setDoc(userDocRef, newProfile);
+                    setUserAndCache(newProfile);
+                  }
+                } else {
+                  // Fallback without Firestore
+                  const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
+                  const fallbackProfile: UserProfile = {
+                    id: firebaseUser.uid,
+                    name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'Believer'),
+                    email: firebaseUser.email || '',
+                    handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
+                    avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
+                    bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
+                    status: 'online',
+                    followersCount: isTexAdmin ? 777 : 0,
+                    followingCount: isTexAdmin ? 12 : 0,
+                    isVerified: true,
+                    joinedAt: new Date().toISOString(),
+                    authProvider: (firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email')
+                  };
+                  setUserAndCache(fallbackProfile);
+                }
+              } catch (dbErr) {
+                console.error('Error fetching/setting user profile in Firestore:', dbErr);
+                // Fallback to local profile constructed directly from firebaseUser
+                const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
+                const fallbackProfile: UserProfile = {
+                  id: firebaseUser.uid,
+                  name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'Believer'),
+                  email: firebaseUser.email || '',
+                  handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
+                  avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
+                  bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
+                  status: 'online',
+                  followersCount: isTexAdmin ? 777 : 0,
+                  followingCount: isTexAdmin ? 12 : 0,
+                  isVerified: true,
+                  joinedAt: new Date().toISOString(),
+                  authProvider: (firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email')
+                };
+                setUserAndCache(fallbackProfile);
+              }
+            } else {
+              // If not signed into Firebase, preserve local guest or demo sessions
+              try {
+                const cached = localStorage.getItem('aura_cached_user');
+                if (cached) {
+                  const parsed = JSON.parse(cached);
+                  if (parsed && (parsed.authProvider === 'guest' || parsed.authProvider === 'demo' || parsed.id?.startsWith('tex_'))) {
+                    setUser(parsed);
+                    return;
+                  }
+                }
+              } catch {}
+              setUserAndCache(null);
             }
+          },
+          (authError) => {
+            console.warn('onAuthStateChanged error handled safely:', authError);
           }
-        } catch {}
-        setUserAndCache(null);
+        );
+      } catch (authInitErr) {
+        console.warn('Auth listener init error handled safely:', authInitErr);
       }
-    });
+    }
 
     return () => {
       if (unsubscribeUsers) unsubscribeUsers();

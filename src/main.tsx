@@ -3,6 +3,30 @@ import {createRoot} from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+// Prevent unhandled third-party Firebase or network errors from blanking the screen
+if (typeof window !== "undefined") {
+  window.addEventListener("error", (event) => {
+    if (
+      event?.message?.includes("invalid-api-key") ||
+      event?.error?.message?.includes("invalid-api-key") ||
+      event?.message?.includes("auth/")
+    ) {
+      console.warn("[Aura Safe Mode] Suppressed Firebase auth error:", event.message);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event?.reason;
+    const msg = typeof reason === "string" ? reason : reason?.message || "";
+    if (msg.includes("invalid-api-key") || msg.includes("auth/")) {
+      console.warn("[Aura Safe Mode] Suppressed Firebase unhandled rejection:", msg);
+      event.preventDefault();
+    }
+  });
+}
+
 // Handle Service Worker cleanly and ensure preview is never stuck offline
 if (typeof window !== "undefined") {
   const isPreviewOrDev =
