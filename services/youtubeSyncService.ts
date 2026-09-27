@@ -57,8 +57,15 @@ export function parseSermonFilename(filename: string): ParsedSermonMetadata {
     seriesPart = parseInt(partMatch[1], 10);
   }
 
-  // Detect Pathway to Recovery / 12 Steps
-  if (/pathway\s*to\s*recovery|recovery|spiritual\s*principle/i.test(normalized) || /principle\s*\d+/i.test(normalized)) {
+  // Detect RU Recovery / Reformers Unanimous
+  if (/reformers\s*unanimous|ru\s*recovery|ru\s*ministr/i.test(normalized)) {
+    series = 'Path to Freedom - 10 Principles';
+    channel = 'Reformers Unanimous';
+    speaker = 'Reformers Unanimous';
+  }
+
+  // Detect Pathway to Recovery / 12 Steps (Tex)
+  else if (/pathway\s*to\s*recovery|recovery\s*meeting|spiritual\s*principle/i.test(normalized) || /principle\s*\d+/i.test(normalized)) {
     series = 'Pathway to Recovery';
     channel = 'Pathway to Recovery';
     speaker = 'Tex';
@@ -76,10 +83,40 @@ export function parseSermonFilename(filename: string): ParsedSermonMetadata {
     channel = 'In Touch Ministries';
   }
 
-  // Detect Pastor Paul / Lighthouse Baptist
-  if (/lighthouse\s*baptist/i.test(normalized)) {
+  // Detect Pastor Paul / Luke Shope / Lighthouse Baptist
+  if (/lighthouse\s*baptist|shope/i.test(normalized)) {
     channel = 'Lighthouse Baptist Church';
-    speaker = 'Pastor Paul';
+    speaker = 'Pastor Luke Shope';
+  }
+
+  // Detect Fargo Baptist Church
+  if (/fargo\s*baptist/i.test(normalized)) {
+    channel = 'Fargo Baptist Church';
+    speaker = 'Fargo Baptist Church';
+  }
+
+  // Detect Our Daily Bread
+  if (/our\s*daily\s*bread/i.test(normalized)) {
+    channel = 'Our Daily Bread';
+    speaker = 'Our Daily Bread';
+  }
+
+  // Detect Lilly Grove
+  if (/lilly\s*grove/i.test(normalized)) {
+    channel = 'Lilly Grove Missionary Baptist Church';
+    speaker = 'Lilly Grove Baptist';
+  }
+
+  // Detect Alfred Street
+  if (/alfred\s*street/i.test(normalized)) {
+    channel = 'Alfred Street Baptist Church';
+    speaker = 'Alfred Street Baptist';
+  }
+
+  // Detect Steven Furtick
+  if (/furtick|elevation/i.test(normalized)) {
+    channel = 'Steven Furtick';
+    speaker = 'Steven Furtick';
   }
 
   // Split into parts by delimiter " - "

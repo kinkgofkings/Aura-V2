@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Heart, Sparkles, BookOpen, Volume2, Video, Play, Pause, 
   ExternalLink, Calendar, Users, CheckCircle2, UserPlus, MessageCircle, 
-  Layers, ArrowRight
+  Layers, ArrowRight, Share2, RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundEffects } from '../../services/audio';
 import { Avatar } from '../common/Avatar';
 import { AsyncMedia } from '../common/AsyncMedia';
 import { UserProfile } from '../../types';
+import { getSermonCoverImage } from '../../utils/sermonCovers';
 
 // ==========================================
 // 1. PRAYER WALL DRIFT CARD
@@ -32,49 +33,134 @@ const DEFAULT_PRAYERS: PrayerItem[] = [
     authorName: 'Tex',
     authorHandle: 'tex',
     isAnonymous: false,
-    category: 'General',
+    category: 'Community',
     content: 'Lord, grant strength, peace, and healing today over every household in our community. Let Your presence dwell in our hearts and guide our every step.',
-    prayedCount: 38,
+    prayedCount: 42,
     prayedUsers: [],
     isAnswered: false,
     createdAt: new Date().toISOString()
   },
   {
-    id: 'prayer-community-2',
+    id: 'prayer-recovery-freedom',
+    authorName: 'Brother Marcus',
+    authorHandle: 'marcus_in_christ',
+    isAnonymous: false,
+    category: 'Recovery',
+    content: 'Father, I pray for every soul struggling with addiction or secret strongholds today. Break every chain in Jesus\' mighty name, for whom the Son sets free is free indeed! (John 8:36)',
+    prayedCount: 65,
+    prayedUsers: [],
+    isAnswered: false,
+    createdAt: new Date(Date.now() - 3600000 * 3).toISOString()
+  },
+  {
+    id: 'prayer-anxiety-peace',
+    authorName: 'Sister Deborah',
+    authorHandle: 'deborah_grace',
+    isAnonymous: false,
+    category: 'Peace',
+    content: 'Lord, when anxiety rises within us, let Your consolations delight our souls. Calm every racing thought and give peaceful rest to the weary believer reading this right now.',
+    prayedCount: 39,
+    prayedUsers: [],
+    isAnswered: false,
+    createdAt: new Date(Date.now() - 3600000 * 7).toISOString()
+  },
+  {
+    id: 'prayer-healing-testimony',
     authorName: 'Hannah Grace',
     authorHandle: 'hannahg',
     isAnonymous: false,
     category: 'Healing',
-    content: 'Asking for continued prayers for my mother recovery. We felt God peace through every test and doctor report this week!',
-    prayedCount: 24,
+    content: 'Asking for continued prayers for my mother\'s full restoration. We felt God\'s miraculous peace through every medical report this week. Praise God for His healing touch!',
+    prayedCount: 51,
     prayedUsers: [],
     isAnswered: true,
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString()
+    createdAt: new Date(Date.now() - 3600000 * 12).toISOString()
+  },
+  {
+    id: 'prayer-family-marriage',
+    authorName: 'Caleb & Sarah',
+    authorHandle: 'caleb_s',
+    isAnonymous: false,
+    category: 'Family',
+    content: 'Lord, we lift up every family and marriage in the Sanctuary. Knit our homes together in patience, humble forgiveness, and unwavering Christlike devotion.',
+    prayedCount: 33,
+    prayedUsers: [],
+    isAnswered: false,
+    createdAt: new Date(Date.now() - 3600000 * 18).toISOString()
+  },
+  {
+    id: 'prayer-morning-renewal',
+    authorName: 'Sanctuary Intercessors',
+    authorHandle: 'sanctuary_prayer',
+    isAnonymous: false,
+    category: 'Praise',
+    content: 'The steadfast love of the Lord never ceases; His mercies never come to an end; they are new every morning. Great is Your faithfulness, O God! (Lamentations 3:22-23)',
+    prayedCount: 77,
+    prayedUsers: [],
+    isAnswered: false,
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
+  },
+  {
+    id: 'prayer-youth-protection',
+    authorName: 'Pastor Luke',
+    authorHandle: 'pastor_luke',
+    isAnonymous: false,
+    category: 'Protection',
+    content: 'Lord God, surround our young people with Your angels. Shield their minds from worldly deception, kindle a burning passion for Your Word, and raise them up as bold champions for the Gospel.',
+    prayedCount: 48,
+    prayedUsers: [],
+    isAnswered: false,
+    createdAt: new Date(Date.now() - 3600000 * 22).toISOString()
+  },
+  {
+    id: 'prayer-wisdom-guidance',
+    authorName: 'Elijah K.',
+    authorHandle: 'elijah_walk',
+    isAnonymous: false,
+    category: 'Wisdom',
+    content: 'Lord, for anyone facing big decisions or difficult crossroads this week, grant the spirit of wisdom and revelation. Make their paths straight as they trust in You with all their heart.',
+    prayedCount: 29,
+    prayedUsers: [],
+    isAnswered: false,
+    createdAt: new Date(Date.now() - 3600000 * 15).toISOString()
   }
 ];
 
-export const PrayerDriftCard: React.FC<{ index?: number }> = () => {
-  const [prayer, setPrayer] = useState<PrayerItem>(DEFAULT_PRAYERS[0]);
+export const PrayerDriftCard: React.FC<{ index?: number }> = ({ index = 0 }) => {
+  const [prayerPool, setPrayerPool] = useState<PrayerItem[]>(DEFAULT_PRAYERS);
+  const [prayerIndex, setPrayerIndex] = useState(() => (index % DEFAULT_PRAYERS.length));
   const [hasPrayed, setHasPrayed] = useState(false);
-  const [amenCount, setAmenCount] = useState(38);
+  const [amenCount, setAmenCount] = useState(42);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('aura_church_prayer_wall');
+      let combined = [...DEFAULT_PRAYERS];
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Find Tex's prayer or take the first prayer
-          const texPrayer = parsed.find(p => p.authorName?.toLowerCase().includes('tex') || p.authorHandle?.toLowerCase().includes('tex'));
-          const chosen = texPrayer || parsed[0];
-          setPrayer(chosen);
-          setAmenCount(chosen.prayedCount || 28);
+          combined = [...parsed, ...DEFAULT_PRAYERS];
         }
       }
+      setPrayerPool(combined);
+      const chosenIdx = Math.abs((index * 3 + Math.floor(Date.now() / (1000 * 60 * 30))) % combined.length);
+      setPrayerIndex(chosenIdx);
+      setAmenCount(combined[chosenIdx]?.prayedCount || 35);
     } catch (e) {
       console.warn('Error loading prayer wall item for feed:', e);
     }
-  }, []);
+  }, [index]);
+
+  const currentPrayer = prayerPool[prayerIndex] || DEFAULT_PRAYERS[0];
+
+  const handleNextPrayer = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    soundEffects.playTap();
+    setHasPrayed(false);
+    const nextIdx = (prayerIndex + 1) % prayerPool.length;
+    setPrayerIndex(nextIdx);
+    setAmenCount(prayerPool[nextIdx]?.prayedCount || 28);
+  };
 
   const handleAmen = () => {
     soundEffects.playTap();
@@ -97,16 +183,16 @@ export const PrayerDriftCard: React.FC<{ index?: number }> = () => {
     soundEffects.playTap();
     try {
       localStorage.setItem('aura_study_initial_tab', 'prayers');
-      localStorage.setItem('aura_target_prayer_id', prayer.id);
-      sessionStorage.setItem('aura_target_prayer_id', prayer.id);
+      localStorage.setItem('aura_target_prayer_id', currentPrayer.id);
+      sessionStorage.setItem('aura_target_prayer_id', currentPrayer.id);
     } catch {}
     window.dispatchEvent(
       new CustomEvent('navigate_tab', {
         detail: {
           tab: 'bible',
           subtab: 'prayers',
-          prayerId: prayer.id,
-          prayer,
+          prayerId: currentPrayer.id,
+          prayer: currentPrayer,
         },
       })
     );
@@ -115,16 +201,16 @@ export const PrayerDriftCard: React.FC<{ index?: number }> = () => {
         new CustomEvent('switch_study_tab', {
           detail: {
             tab: 'prayers',
-            prayerId: prayer.id,
-            prayer,
+            prayerId: currentPrayer.id,
+            prayer: currentPrayer,
           },
         })
       );
       window.dispatchEvent(
         new CustomEvent('target_prayer', {
           detail: {
-            prayerId: prayer.id,
-            prayer,
+            prayerId: currentPrayer.id,
+            prayer: currentPrayer,
           },
         })
       );
@@ -140,30 +226,42 @@ export const PrayerDriftCard: React.FC<{ index?: number }> = () => {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-[11px] font-bold uppercase tracking-wider border border-amber-500/30 flex items-center gap-1.5">
-            <span>🙏 Prayer Wall</span>
+            <span>🙏 Uplifting Prayer</span>
           </span>
           <span className="text-[11px] font-semibold text-slate-400">
-            {prayer.authorName} posted a {prayer.category.toLowerCase()} prayer
+            {currentPrayer.authorName} • {currentPrayer.category}
           </span>
         </div>
-        <span className="text-[10px] text-amber-400/80 font-semibold px-2 py-0.5 rounded-md bg-amber-500/10">
-          Community Request
-        </span>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleNextPrayer}
+            className="p-1 rounded-lg text-slate-400 hover:text-amber-300 bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-1 text-[10px] font-semibold px-2 cursor-pointer"
+            title="Read another prayer"
+          >
+            <RefreshCw className="w-3 h-3 text-amber-400" />
+            <span className="hidden sm:inline">Next Prayer</span>
+          </button>
+          <span className="text-[10px] text-amber-400/80 font-semibold px-2 py-0.5 rounded-md bg-amber-500/10">
+            Sanctuary Wall
+          </span>
+        </div>
       </div>
 
       {/* Prayer Content */}
-      <div className="space-y-2">
+      <div className="space-y-2 cursor-pointer group" onClick={handleGoToWall}>
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center font-bold text-sm shrink-0">
-            {prayer.isAnonymous ? '?' : prayer.authorName.charAt(0).toUpperCase()}
+            {currentPrayer.isAnonymous ? '?' : currentPrayer.authorName.charAt(0).toUpperCase()}
           </div>
           <div className="space-y-1">
-            <h4 className="text-xs font-bold text-amber-200">
-              {prayer.isAnonymous ? 'Anonymous Church Member' : prayer.authorName}
-              {!prayer.isAnonymous && <span className="text-slate-400 font-normal ml-1">@{prayer.authorHandle}</span>}
+            <h4 className="text-xs font-bold text-amber-200 group-hover:text-amber-300 transition-colors">
+              {currentPrayer.isAnonymous ? 'Anonymous Church Member' : currentPrayer.authorName}
+              {!currentPrayer.isAnonymous && <span className="text-slate-400 font-normal ml-1">@{currentPrayer.authorHandle}</span>}
             </h4>
-            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-serif italic">
-              "{prayer.content}"
+            <p className="text-xs sm:text-base text-amber-100/90 leading-relaxed font-serif italic group-hover:text-amber-200 transition-colors">
+              "{currentPrayer.content}"
             </p>
           </div>
         </div>
@@ -173,24 +271,24 @@ export const PrayerDriftCard: React.FC<{ index?: number }> = () => {
       <div className="flex items-center justify-between pt-2 border-t border-amber-500/15 gap-2 flex-wrap">
         <div className="text-[11px] text-amber-300/90 font-semibold flex items-center gap-1.5">
           <Heart className={`w-3.5 h-3.5 ${hasPrayed ? 'text-amber-400 fill-amber-400' : 'text-amber-400/60'}`} />
-          <span>{amenCount} praying with {prayer.authorName}</span>
+          <span>{amenCount} praying in faith</span>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleAmen}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
               hasPrayed
                 ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 font-extrabold'
                 : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30'
             }`}
           >
-            <span>{hasPrayed ? '✓ Prayed' : '🙏 Amen / Pray'}</span>
+            <span>{hasPrayed ? '✓ Prayed Amen' : '🙏 Say Amen'}</span>
           </button>
 
           <button
             onClick={handleGoToWall}
-            className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all"
+            className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
           >
             <span>Prayer Wall</span>
             <ArrowRight className="w-3 h-3" />
@@ -234,29 +332,70 @@ const FALLBACK_SERMONS: SermonItem[] = [
   }
 ];
 
-export const SermonDriftCard: React.FC<{ index?: number }> = () => {
+export const SermonDriftCard: React.FC<{ index?: number }> = ({ index = 0 }) => {
   const [sermon, setSermon] = useState<SermonItem>(FALLBACK_SERMONS[0]);
   const [isPlayingInline, setIsPlayingInline] = useState(false);
 
   useEffect(() => {
     const fetchRecentSermon = async () => {
       try {
-        // We fetch from community sermons to ensure we get the Lighthouse sermons
-        const res = await fetch('/api/bible/community/sermons');
-        if (res.ok) {
-          const list = await res.json();
-          if (Array.isArray(list) && list.length > 0) {
-            // Prefer Lighthouse sermons
-            const lighthouse = list.find(s => s.channel?.toLowerCase().includes('lighthouse'));
-            setSermon(lighthouse || list[0]);
+        let combined: any[] = [];
+        
+        // 1. Fetch community & syndicated ministry sermons
+        try {
+          const resComm = await fetch('/api/bible/community/sermons');
+          if (resComm.ok) {
+            const list = await resComm.json();
+            if (Array.isArray(list)) combined.push(...list);
           }
+        } catch {}
+
+        // 2. Fetch studio-uploaded or studio-recorded videos/audios
+        try {
+          const resStudio = await fetch('/api/bible/sermons');
+          if (resStudio.ok) {
+            const studioList = await resStudio.json();
+            if (Array.isArray(studioList)) {
+              combined.push(...studioList.map((s: any) => ({
+                ...s,
+                channel: s.channel || 'Sanctuary Studio Archive',
+                publishedAt: s.dateRecorded || s.createdAt || new Date().toISOString()
+              })));
+            }
+          }
+        } catch {}
+
+        if (combined.length > 0) {
+          // Sort by recency to emphasize newly added media and newly made videos/audios
+          combined.sort((a, b) => {
+            const timeA = new Date(a.publishedAt || a.dateRecorded || a.createdAt || 0).getTime();
+            const timeB = new Date(b.publishedAt || b.dateRecorded || b.createdAt || 0).getTime();
+            return timeB - timeA;
+          });
+
+          // Rotate through diverse channels (RU Recovery, Tony Evans, Lighthouse, Scott Pauley, Fargo Baptist, etc.)
+          const pickIdx = Math.abs((index * 2 + Math.floor(Date.now() / (1000 * 60 * 15))) % combined.length);
+          setSermon(combined[pickIdx]);
         }
       } catch (e) {
         console.warn('Error loading sermon for feed:', e);
       }
     };
     fetchRecentSermon();
-  }, []);
+  }, [index]);
+
+  const handleShareToFeed = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    soundEffects.playTap();
+    window.dispatchEvent(
+      new CustomEvent('open_create_post', {
+        detail: {
+          content: `🎙️ Featured in Sanctuary Pulpit: "${sermon.title}" by ${sermon.speaker || 'Pastor'}${sermon.scriptureRef ? ` (${sermon.scriptureRef})` : ''} • Channel: ${sermon.channel || 'Pulpit'}\n\n#Sermon #FaithMedia #Sanctuary`,
+          tags: 'Sermon,FaithMedia'
+        }
+      })
+    );
+  };
 
   const handleOpenInScriptures = () => {
     soundEffects.playTap();
@@ -302,6 +441,8 @@ export const SermonDriftCard: React.FC<{ index?: number }> = () => {
     return `${m} min`;
   };
 
+  const coverUrl = getSermonCoverImage(sermon, index);
+
   return (
     <div className="rounded-3xl bg-gradient-to-br from-amber-950/40 via-[#090e28]/95 to-yellow-950/30 border border-amber-500/35 p-4 sm:p-5 shadow-2xl space-y-3.5 backdrop-blur-xl relative overflow-hidden animate-fade-in">
       {/* Glow */}
@@ -322,20 +463,39 @@ export const SermonDriftCard: React.FC<{ index?: number }> = () => {
         </div>
 
         <span className="text-[10px] text-amber-300/80 font-bold px-2 py-0.5 rounded-md bg-amber-500/10">
-          Recently Uploaded
+          Recently Added Media
         </span>
       </div>
 
-      {/* Notification Headline */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <p className="text-xs font-bold text-amber-200">
-            {sermon.speaker || 'Pastor'} uploaded a new sermon • watch/listen now
-          </p>
+      {/* Visual Cover Preview */}
+      <div 
+        onClick={handleOpenInScriptures}
+        className="relative w-full aspect-[21/9] sm:aspect-[16/7] rounded-2xl overflow-hidden cursor-pointer group border border-white/10"
+      >
+        <img
+          src={coverUrl}
+          alt={sermon.title}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+        
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-amber-600/90 text-white flex items-center justify-center shadow-lg shadow-amber-500/40 group-hover:scale-110 transition-transform">
+            <Play className="w-5 h-5 fill-white ml-0.5" />
+          </div>
         </div>
 
-        <h4 className="text-base sm:text-lg font-extrabold text-white leading-snug">
+        <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[11px] text-white font-semibold">
+          <span className="truncate max-w-[200px] text-amber-200">{sermon.speaker || 'Pastor'}</span>
+          <span className="bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] text-slate-300">
+            {formatMinSec(sermon.duration)}
+          </span>
+        </div>
+      </div>
+
+      {/* Notification Headline */}
+      <div className="space-y-1.5 cursor-pointer" onClick={handleOpenInScriptures}>
+        <h4 className="text-base sm:text-lg font-extrabold text-white leading-snug hover:text-amber-300 transition-colors">
           {sermon.title}
         </h4>
 
@@ -379,26 +539,32 @@ export const SermonDriftCard: React.FC<{ index?: number }> = () => {
 
       {/* Footer Controls */}
       <div className="flex items-center justify-between pt-2 border-t border-amber-500/20 gap-2 flex-wrap">
-        <span className="text-xs text-slate-400 font-medium">
-          Duration: {formatMinSec(sermon.duration)}
-        </span>
+        <button
+          type="button"
+          onClick={handleShareToFeed}
+          className="text-xs font-semibold text-slate-300 hover:text-amber-300 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+          title="Share to Faith Feed"
+        >
+          <Share2 className="w-3.5 h-3.5 text-amber-400" />
+          <span>Share to Feed</span>
+        </button>
 
         <div className="flex items-center gap-2">
           {sermon.mediaUrl && (
             <button
               onClick={() => setIsPlayingInline(!isPlayingInline)}
-              className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"
+              className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
             >
               {isPlayingInline ? <Pause className="w-3.5 h-3.5 text-amber-400" /> : <Play className="w-3.5 h-3.5 text-amber-400" />}
-              <span>{isPlayingInline ? 'Close Player' : sermon.mediaType === 'audio' ? 'Listen Now' : 'Watch Now'}</span>
+              <span>{isPlayingInline ? 'Close' : sermon.mediaType === 'audio' ? 'Listen' : 'Watch'}</span>
             </button>
           )}
 
           <button
             onClick={handleOpenInScriptures}
-            className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold shadow-lg shadow-amber-500/25 border border-amber-400/30 flex items-center gap-1.5 transition-all active:scale-95"
+            className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold shadow-lg shadow-amber-500/25 border border-amber-400/30 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
           >
-            <span>Go to Sermons</span>
+            <span>Sanctuary Pulpit</span>
             <ExternalLink className="w-3 h-3" />
           </button>
         </div>

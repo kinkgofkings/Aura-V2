@@ -19,8 +19,11 @@ import { X,
   Tv,
   Film,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Share2
 } from "lucide-react";
+import { getSermonCoverImage } from "../../utils/sermonCovers";
+import { soundEffects } from "../../services/audio";
 
 export interface SermonItem {
   id: string;
@@ -278,7 +281,7 @@ export function PodcastFeed({
   const availableChannels = useMemo(() => {
     const set = new Set<string>();
     sermons
-      .filter((s) => s.format === formatFilter)
+      .filter((s) => formatFilter === "all" || s.format === formatFilter)
       .forEach((s) => {
         if (s.channel && s.channel.trim()) set.add(s.channel.trim());
         else if (s.speaker && s.speaker.trim()) set.add(s.speaker.trim());
@@ -289,7 +292,7 @@ export function PodcastFeed({
   const availableSeries = useMemo(() => {
     const map = new Map<string, number>();
     sermons
-      .filter((s) => s.format === formatFilter && s.series)
+      .filter((s) => (formatFilter === "all" || s.format === formatFilter) && s.series)
       .forEach((s) => {
         const ser = s.series!.trim();
         map.set(ser, (map.get(ser) || 0) + 1);
@@ -298,7 +301,7 @@ export function PodcastFeed({
   }, [sermons, formatFilter]);
 
   const filtered = sermons.filter((item) => {
-    if (item.format !== formatFilter) return false;
+    if (formatFilter !== "all" && item.format !== formatFilter) return false;
     if (sourceFilter === "stories") {
       const isStory = 
         item.title?.toLowerCase().includes("audio story") || 
@@ -309,10 +312,16 @@ export function PodcastFeed({
       return false;
     }
 
-    // Channel filter
+    // Channel filter (with support for RU Recovery & Reformers Unanimous matching)
     if (selectedChannel !== "all") {
-      const matchCh = item.channel?.toLowerCase() === selectedChannel.toLowerCase() ||
-                      item.speaker?.toLowerCase().includes(selectedChannel.toLowerCase());
+      const qCh = selectedChannel.toLowerCase();
+      const itemCh = (item.channel || "").toLowerCase();
+      const itemSpk = (item.speaker || "").toLowerCase();
+      const isRuMatch = 
+        (qCh.includes("ru recovery") || qCh.includes("reformers")) && 
+        (itemCh.includes("ru recovery") || itemCh.includes("reformers") || itemSpk.includes("reformers"));
+
+      const matchCh = isRuMatch || itemCh === qCh || itemCh.includes(qCh) || itemSpk.includes(qCh);
       if (!matchCh) return false;
     }
 
@@ -334,6 +343,18 @@ export function PodcastFeed({
     }
     return true;
   });
+
+  const handleShareSermon = (sermon: SermonItem) => {
+    soundEffects.playTap();
+    window.dispatchEvent(
+      new CustomEvent('open_create_post', {
+        detail: {
+          content: `🎙️ Check out this sermon: "${sermon.title}" by ${sermon.speaker}${sermon.scriptureRef ? ` (${sermon.scriptureRef})` : ''} in the Sanctuary Pulpit!\n\n#Sermon #SanctuaryWord #${(sermon.channel || 'Pulpit').replace(/[^a-zA-Z0-9]/g, '')}`,
+          tags: 'Sermon,SanctuaryWord'
+        }
+      })
+    );
+  };
 
   // Sermons inside the selected series container, sorted by part number
   const seriesContainerItems = useMemo(() => {
@@ -610,7 +631,7 @@ export function PodcastFeed({
       ) : (
         <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "space-y-3"}>
           {filtered.map((sermon, idx) => {
-            const cover = sermon.thumbnailUrl || sermon.speakerImage || FALLBACK_COVERS[idx % FALLBACK_COVERS.length];
+            const cover = getSermonCoverImage(sermon, idx);
             const isCurrent = activeItem?.id === sermon.id;
             const isTargeted = highlightedSermonId === sermon.id;
 
@@ -715,6 +736,27 @@ export function PodcastFeed({
                             {sermon.seriesPart && <span className="text-yellow-200">Pt. {sermon.seriesPart}</span>}
                           </button>
                         )}
+                      </div>
+
+                      {/* Video Bottom Actions */}
+                      <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShareSermon(sermon);
+                          }}
+                          className="text-xs font-semibold text-slate-300 hover:text-amber-300 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                          title="Share to Faith Feed"
+                        >
+                          <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Share to Feed</span>
+                        </button>
+
+                        <span className="text-xs font-bold text-amber-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                          <span>Watch</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -829,16 +871,28 @@ export function PodcastFeed({
                 </div>
 
                 <div className="p-5 pt-0 flex items-center justify-between gap-2 border-t border-white/5 mt-3 pt-3">
-                  {sermon.scriptureRef ? (
+                  <div className="flex items-center gap-2">
+                    {sermon.scriptureRef ? (
+                      <button
+                        type="button"
+                        onClick={() => onStudyPassage && onStudyPassage(sermon.scriptureRef!)}
+                        className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Study</span>
+                      </button>
+                    ) : <span />}
+
                     <button
                       type="button"
-                      onClick={() => onStudyPassage && onStudyPassage(sermon.scriptureRef!)}
-                      className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                      onClick={() => handleShareSermon(sermon)}
+                      className="text-xs font-semibold text-slate-300 hover:text-amber-300 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                      title="Share to Faith Feed"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Study Notes</span>
+                      <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Share</span>
                     </button>
-                  ) : <span />}
+                  </div>
 
                   <button
                     type="button"
