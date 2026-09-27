@@ -13,7 +13,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'signup' }) => {
   const { 
-    registerWithEmail, loginWithEmail, loginAsGuest, loginAsAdminTex,
+    registerWithEmail, loginWithEmail, loginAsGuest,
     signInWithGoogle, signInWithFacebook, signInWithGithub, sendVerificationEmail, 
     resetPassword, setupRecaptcha, sendPhoneCode, verifyPhoneCode 
   } = useAuth();
@@ -148,19 +148,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       onClose();
     } else {
       setErrorMessage(result.error || 'Guest login failed.');
-    }
-    setIsSubmitting(false);
-  };
-
-  const handleAdminTexLogin = async () => {
-    soundEffects.playTap();
-    setErrorMessage(null);
-    setIsSubmitting(true);
-    const result = await loginAsAdminTex();
-    if (result.success) {
-      onClose();
-    } else {
-      setErrorMessage(result.error || 'Admin login failed.');
     }
     setIsSubmitting(false);
   };
@@ -436,7 +423,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
 
           {(mode === 'login' || mode === 'signup') && (
             <>
-              <div className="flex items-center gap-4 my-6">
+              <div className="flex items-center gap-4 my-5">
                 <div className="flex-1 h-px bg-white/10" />
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Or continue with</span>
                 <div className="flex-1 h-px bg-white/10" />
@@ -447,7 +434,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                   type="button"
                   onClick={() => handleSocialLogin('google')}
                   disabled={isSubmitting}
-                  className="w-full py-3 bg-white text-slate-900 font-semibold rounded-xl hover:bg-slate-100 active:scale-[0.99] transition-all text-sm flex items-center justify-center gap-3 shadow-sm disabled:opacity-50"
+                  className="w-full py-3 bg-white text-slate-900 font-semibold rounded-xl hover:bg-slate-100 active:scale-[0.99] transition-all text-sm flex items-center justify-center gap-3 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
                   <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
@@ -455,29 +442,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                     <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
                     <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
                   </svg>
-                  Continue with Google
+                  <span>Continue with Google</span>
                 </button>
               </div>
 
-              <div className="space-y-2 mb-5">
+              <div className="space-y-2.5 mb-5">
                 <button
                   type="button"
                   onClick={handleGuestLogin}
                   disabled={isSubmitting}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500/15 via-yellow-500/20 to-amber-500/15 hover:from-amber-500/25 hover:to-yellow-500/25 text-amber-300 font-semibold rounded-xl border border-amber-500/30 active:scale-[0.99] transition-all text-sm flex items-center justify-center gap-2.5 shadow-sm"
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500/15 via-yellow-500/20 to-amber-500/15 hover:from-amber-500/25 hover:to-yellow-500/25 text-amber-300 font-semibold rounded-xl border border-amber-500/30 active:scale-[0.99] transition-all text-sm flex items-center justify-center gap-2.5 shadow-sm cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  Instant Believer Access (Enter Sanctuary Now)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleAdminTexLogin}
-                  disabled={isSubmitting}
-                  className="w-full py-2 px-3 bg-purple-950/40 hover:bg-purple-900/50 text-purple-300 hover:text-purple-200 font-medium rounded-xl border border-purple-500/30 active:scale-[0.99] transition-all text-xs flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-                  Fast Admin Sign In (Tex)
+                  <span>Continue as Guest</span>
                 </button>
               </div>
 

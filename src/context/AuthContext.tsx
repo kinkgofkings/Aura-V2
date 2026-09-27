@@ -41,7 +41,6 @@ interface AuthContextType {
   loginWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string; requiresVerification?: boolean }>;
   registerWithEmail: (email: string, username: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>;
   loginAsGuest: () => Promise<{ success: boolean; error?: string }>;
-  loginAsAdminTex: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   
   // Social
@@ -73,7 +72,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
     try {
-      const cached = localStorage.getItem('aura_cached_user');
+      const cached = localStorage.getItem('aura_cached_user') || localStorage.getItem('aura_active_user');
       return cached ? JSON.parse(cached) : null;
     } catch {
       return null;
@@ -90,8 +89,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (newUser) {
         localStorage.setItem('aura_cached_user', JSON.stringify(newUser));
+        localStorage.setItem('aura_active_user', JSON.stringify(newUser));
       } else {
         localStorage.removeItem('aura_cached_user');
+        localStorage.removeItem('aura_active_user');
       }
     } catch {}
   };
@@ -128,27 +129,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
           
+          const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
           if (userDoc.exists()) {
             const profileData = userDoc.data() as Omit<UserProfile, 'id'>;
             const fullProfile: UserProfile = { 
               id: firebaseUser.uid, 
               ...profileData,
-              isVerified: firebaseUser.emailVerified || !!firebaseUser.phoneNumber || profileData.authProvider !== 'email'
+              name: isTexAdmin ? 'Tex' : (profileData.name || firebaseUser.displayName || 'Believer'),
+              handle: isTexAdmin ? 'tex' : (profileData.handle || 'believer'),
+              isVerified: true
             };
             setUserAndCache(fullProfile);
           } else {
             // If no doc exists (e.g. newly signed up via social), create one
             const newProfile: UserProfile = {
               id: firebaseUser.uid,
-              name: firebaseUser.displayName || 'New User',
+              name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'New User'),
               email: firebaseUser.email || '',
-              handle: (firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase(),
-              avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${firebaseUser.uid}`,
-              bio: 'Just joined the sanctuary.',
+              handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
+              avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
+              bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
               status: 'online',
-              followersCount: 0,
-              followingCount: 0,
-              isVerified: firebaseUser.emailVerified || !!firebaseUser.phoneNumber,
+              followersCount: isTexAdmin ? 777 : 0,
+              followingCount: isTexAdmin ? 12 : 0,
+              isVerified: true,
               joinedAt: new Date().toISOString(),
               authProvider: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email'
             };
@@ -158,16 +162,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (dbErr) {
           console.error('Error fetching/setting user profile in Firestore:', dbErr);
           // Fallback to local profile constructed directly from firebaseUser
+          const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
           const fallbackProfile: UserProfile = {
             id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'Believer',
+            name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'Believer'),
             email: firebaseUser.email || '',
-            handle: (firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase(),
-            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${firebaseUser.uid}`,
-            bio: 'Just joined the sanctuary.',
+            handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
+            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
+            bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
             status: 'online',
-            followersCount: 0,
-            followingCount: 0,
+            followersCount: isTexAdmin ? 777 : 0,
+            followingCount: isTexAdmin ? 12 : 0,
             isVerified: true,
             joinedAt: new Date().toISOString(),
             authProvider: (firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email')
@@ -253,15 +258,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (res.user) {
             const guestProfile: UserProfile = {
               id: res.user.uid,
-              name: 'Believer Guest',
-              email: 'guest@aura.sanctuary',
-              handle: 'believer_' + res.user.uid.slice(0, 5).toLowerCase(),
+              name: 'Guest',
+              email: '',
+              handle: 'guest_' + res.user.uid.slice(0, 5).toLowerCase(),
               avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${res.user.uid}`,
-              bio: 'Walking in the Light with Aura.',
+              bio: 'Visiting the sanctuary as a guest.',
               status: 'online',
               followersCount: 0,
               followingCount: 0,
-              isVerified: true,
+              isVerified: false,
               joinedAt: new Date().toISOString(),
               authProvider: 'guest'
             };
@@ -279,15 +284,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Guaranteed instant guest session fallback
     const localGuest: UserProfile = {
       id: 'guest_' + Math.random().toString(36).substring(2, 9),
-      name: 'Believer Guest',
-      email: 'guest@aura.sanctuary',
-      handle: 'believer_' + Math.random().toString(36).substring(2, 6),
+      name: 'Guest',
+      email: '',
+      handle: 'guest_' + Math.random().toString(36).substring(2, 6),
       avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=AuraGuest`,
-      bio: 'Walking in the Light with Aura.',
+      bio: 'Visiting the sanctuary as a guest.',
       status: 'online',
       followersCount: 0,
       followingCount: 0,
-      isVerified: true,
+      isVerified: false,
       joinedAt: new Date().toISOString(),
       authProvider: 'guest'
     };
@@ -295,32 +300,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const loginAsAdminTex = async () => {
-    const texProfile: UserProfile = {
-      id: 'tex_admin_primary',
-      name: 'Tex',
-      email: 'lightsouttattootex@gmail.com',
-      handle: 'tex',
-      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=TexAdminAura',
-      bio: 'Aura Founder & Administrator. Sanctuary architect.',
-      status: 'online',
-      statusMessage: 'Building the Kingdom in the Matrix',
-      followersCount: 777,
-      followingCount: 12,
-      isVerified: true,
-      joinedAt: new Date().toISOString(),
-      authProvider: 'google'
-    };
-    setUserAndCache(texProfile);
-    return { success: true };
-  };
-
   const signInWithGoogle = async () => {
+    // Detect mobile device, PWA, or small screen
+    const isMobile = 
+      typeof window !== 'undefined' && 
+      (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+       window.matchMedia('(max-width: 768px)').matches ||
+       window.matchMedia('(display-mode: standalone)').matches);
+
+    if (isMobile) {
+      try {
+        await signInWithRedirect(auth, googleProvider);
+        return { success: true };
+      } catch (redirectErr: any) {
+        console.warn('Redirect sign-in notice, attempting popup fallback:', redirectErr);
+      }
+    }
+
     try {
       const result = await signInWithPopup(auth, googleProvider);
       await syncFirebaseUserToDb(result.user, { authProvider: 'google' });
       return { success: true };
     } catch (err: any) {
+      // If popup was blocked or closed on mobile, automatically fall back to redirect
+      if (
+        err?.code === 'auth/popup-closed-by-user' || 
+        err?.code === 'auth/popup-blocked' || 
+        err?.code === 'auth/cancelled-popup-request'
+      ) {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return { success: true };
+        } catch (redirErr: any) {
+          return { success: false, error: redirErr.message || 'Mobile sign-in redirected' };
+        }
+      }
       return { success: false, error: err.message };
     }
   };
@@ -459,7 +473,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{
       user, allUsers, isAuthModalOpen, setIsAuthModalOpen, openAuthModal,
-      loginWithEmail, registerWithEmail, loginAsGuest, loginAsAdminTex, logout,
+      loginWithEmail, registerWithEmail, loginAsGuest, logout,
       signInWithGoogle, signInWithFacebook, signInWithGithub,
       sendVerificationEmail, resetPassword,
       setupRecaptcha, sendPhoneCode, verifyPhoneCode,
