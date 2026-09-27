@@ -574,29 +574,125 @@ export function BibleReader({
     });
   };
 
-  // Fetch chapter text from backend
-  const fetchChapter = async (book: string, chapter: string) => {
-    setLoadingChapter(true);
+  const [isChapterFallback, setIsChapterFallback] = useState(false);
+
+  // Fetch chapter text from backend with automatic retry
+  const fetchChapter = async (book: string, chapter: string, retryCount = 0) => {
+    // 1. Optimistic cache check: load cached chapter immediately if present
+    const cacheKey = `aura_bible_ch_${book.trim()}_${chapter.trim()}`;
+    let hadCachedData = false;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.verses) && parsed.verses.length > 0) {
+          setChapterData(parsed);
+          setIsChapterFallback(false);
+          hadCachedData = true;
+        }
+      }
+    } catch {}
+
+    if (!hadCachedData) {
+      setLoadingChapter(true);
+    }
+
     try {
       const res = await fetch(`/api/bible/chapter?book=${encodeURIComponent(book)}&chapter=${chapter}`);
       if (res.ok) {
         const data = await res.json();
-        if (data && Array.isArray(data.verses)) {
+        if (data && Array.isArray(data.verses) && data.verses.length > 0) {
           setChapterData(data);
+          setIsChapterFallback(false);
           addToHistory(`${book} ${chapter}:${selectedVerse || '1'}`);
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(data));
+          } catch {}
+          setLoadingChapter(false);
           return;
         }
       }
-      fallbackChapter(book, chapter);
+
+      // If server returned empty or non-200, try direct Bible API before falling back
+      try {
+        const directRes = await fetch(`https://bible-api.com/${encodeURIComponent(book + ' ' + chapter)}?translation=kjv`);
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          if (directData && Array.isArray(directData.verses) && directData.verses.length > 0) {
+            const formatted = {
+              reference: `${book} ${chapter}`,
+              book,
+              chapter: parseInt(chapter, 10),
+              verses: directData.verses.map((v: any) => ({
+                verse: v.verse,
+                text: (v.text || '').replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim()
+              }))
+            };
+            setChapterData(formatted);
+            setIsChapterFallback(false);
+            addToHistory(`${book} ${chapter}:${selectedVerse || '1'}`);
+            try {
+              localStorage.setItem(cacheKey, JSON.stringify(formatted));
+            } catch {}
+            setLoadingChapter(false);
+            return;
+          }
+        }
+      } catch (directErr) {
+        console.warn('Direct Bible API fallback error:', directErr);
+      }
+
+      if (retryCount < 2) {
+        setTimeout(() => fetchChapter(book, chapter, retryCount + 1), 700);
+        return;
+      }
+
+      if (!hadCachedData) {
+        fallbackChapter(book, chapter);
+      }
     } catch (err) {
       console.warn('Error loading chapter:', err);
-      fallbackChapter(book, chapter);
+      // Try direct Bible API on network/server error
+      try {
+        const directRes = await fetch(`https://bible-api.com/${encodeURIComponent(book + ' ' + chapter)}?translation=kjv`);
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          if (directData && Array.isArray(directData.verses) && directData.verses.length > 0) {
+            const formatted = {
+              reference: `${book} ${chapter}`,
+              book,
+              chapter: parseInt(chapter, 10),
+              verses: directData.verses.map((v: any) => ({
+                verse: v.verse,
+                text: (v.text || '').replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ').trim()
+              }))
+            };
+            setChapterData(formatted);
+            setIsChapterFallback(false);
+            addToHistory(`${book} ${chapter}:${selectedVerse || '1'}`);
+            try {
+              localStorage.setItem(cacheKey, JSON.stringify(formatted));
+            } catch {}
+            setLoadingChapter(false);
+            return;
+          }
+        }
+      } catch {}
+
+      if (retryCount < 2) {
+        setTimeout(() => fetchChapter(book, chapter, retryCount + 1), 700);
+        return;
+      }
+      if (!hadCachedData) {
+        fallbackChapter(book, chapter);
+      }
     } finally {
       setLoadingChapter(false);
     }
   };
 
   const fallbackChapter = (book: string, chapter: string) => {
+    setIsChapterFallback(true);
     const verses: BibleVerse[] = [
       { verse: 1, text: `The sacred book of ${book}, chapter ${chapter}.` },
       { verse: 2, text: `Thy word is a lamp unto my feet, and a light unto my path.` },
@@ -1346,6 +1442,17 @@ export function BibleReader({
             </div>
           ) : (
             <div className={`space-y-4 leading-relaxed ${readerFontClass}`} style={{ fontSize: `${fontSize}px` }}>
+            {isChapterFallback && (
+              <div className="p-3 mb-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3">
+                <span className="text-[11px] leading-snug">⚠️ Showing offline preview for {selectedBook} {selectedChapter}.</span>
+                <button
+                  onClick={() => fetchChapter(selectedBook, selectedChapter)}
+                  className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] transition-colors flex-shrink-0 cursor-pointer"
+                >
+                  Reload Chapter
+                </button>
+              </div>
+            )}
             {chapterData.verses.map(item => {
               const isSelected = selectedVerse === item.verse.toString();
               const isActionOpen = activeVerseAction === item.verse;

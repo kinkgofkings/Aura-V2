@@ -272,6 +272,12 @@ class KJVLoader {
         "10": { "10": "The thief cometh not, but for to steal, and to kill, and to destroy: I am come that they might have life, and that they might have it more abundantly." },
         "14": { "1": "Let not your heart be troubled: ye believe in God, believe also in me.", "6": "Jesus saith unto him, I am the way, the truth, and the life: no man cometh unto the Father, but by me.", "27": "Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you. Let not your heart be troubled, neither let it be afraid." }
       },
+      "Acts": {
+        "1": { "8": "But ye shall receive power, after that the Holy Ghost is come upon you: and ye shall be witnesses unto me both in Jerusalem, and in all Judaea, and in Samaria, and unto the uttermost part of the earth." },
+        "2": { "1": "And when the day of Pentecost was fully come, they were all with one accord in one place.", "38": "Then Peter said unto them, Repent, and be baptized every one of you in the name of Jesus Christ for the remission of sins, and ye shall receive the gift of the Holy Ghost." },
+        "4": { "12": "Neither is there salvation in any other: for there is none other name under heaven given among men, whereby we must be saved." },
+        "16": { "31": "And they said, Believe on the Lord Jesus Christ, and thou shalt be saved, and thy house." }
+      },
       "Romans": {
         "3": { "23": "For all have sinned, and come short of the glory of God;" },
         "5": { "8": "But God commendeth his love toward us, in that, while we were yet sinners, Christ died for us." },

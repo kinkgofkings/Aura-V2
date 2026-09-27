@@ -93,6 +93,14 @@ export const MatrixSplashScreen: React.FC<MatrixSplashScreenProps> = ({ onEnter 
     return () => clearInterval(interval);
   }, []);
 
+  // Auto-enter sanctuary after 5.5s if untouched so users never get stuck
+  useEffect(() => {
+    const autoEnterTimer = setTimeout(() => {
+      onEnter();
+    }, 5500);
+    return () => clearTimeout(autoEnterTimer);
+  }, [onEnter]);
+
   // Auto-cycle scriptures on saving the lost & broken
   useEffect(() => {
     const scriptureTimer = setInterval(() => {
@@ -285,7 +293,8 @@ export const MatrixSplashScreen: React.FC<MatrixSplashScreenProps> = ({ onEnter 
   return (
     <div
       id="christian-splash-screen"
-      className="fixed inset-0 z-[100] bg-[#03040b] select-none flex flex-col items-center justify-between overflow-hidden"
+      onClick={handleTriggerEnter}
+      className="fixed inset-0 z-[100] bg-[#03040b] select-none flex flex-col items-center justify-between overflow-hidden cursor-pointer"
     >
       {/* Background Volumetric Divine Light & Golden Embers Canvas */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />

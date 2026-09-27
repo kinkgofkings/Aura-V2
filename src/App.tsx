@@ -70,7 +70,11 @@ function MainApp() {
   const [shareInitialContent, setShareInitialContent] = useState<string | undefined>();
   const [showSplashScreen, setShowSplashScreen] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem('aura_splash_entered') !== 'true';
+      // If running inside preview iframe or dev environment, don't block the app view on initial mount
+      if (typeof window !== 'undefined' && window.self !== window.top) {
+        return false;
+      }
+      return sessionStorage.getItem('aura_splash_entered') !== 'true' && localStorage.getItem('aura_splash_entered') !== 'true';
     } catch {
       return false;
     }
@@ -180,6 +184,7 @@ function MainApp() {
   const handleEnterMatrix = () => {
     try {
       sessionStorage.setItem('aura_splash_entered', 'true');
+      localStorage.setItem('aura_splash_entered', 'true');
     } catch {}
     setShowSplashScreen(false);
   };
