@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { getLiveMinistryFeed } from "./services/youtubeFeedService";
+import { performUnifiedImageSearch } from "./services/imageSearchService";
 import webpush from "web-push";
 import express from 'express';
 import path from 'path';
@@ -769,67 +770,22 @@ async function startServer() {
     res.json(signals);
   });
 
-  // --- Pexels Image Proxy ---
+  // --- Image Search Proxy (Pexels + Live Creative Commons + Curated Library) ---
   app.get(['/api/unsplash/search', '/api/pexels/search', '/api/images/search'], async (req, res) => {
     const query = ((req.query.query as string) || (req.query.q as string) || '').trim();
     const accessKey =
+      (req.headers['x-pexels-key'] as string) ||
       process.env.PEXELS_API_KEY ||
       process.env.VITE_PEXELS_API_KEY;
 
     try {
-      const endpoint = query
-        ? `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=30`
-        : `https://api.pexels.com/v1/curated?per_page=30`;
-
-      const response = await fetch(endpoint, {
-        headers: {
-          Authorization: accessKey,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const photos = data.photos || [];
-
-        if (Array.isArray(photos) && photos.length > 0) {
-          const results = photos.map((p: any) => ({
-            id: p.id.toString(),
-            url: p.src?.large || p.src?.original || p.src?.medium,
-            thumb: p.src?.medium || p.src?.small,
-            author: p.photographer || 'Pexels Creator',
-            photographer_url: p.photographer_url,
-            alt_description: p.alt || `${query || 'Worship'} background`,
-            urls: {
-              regular: p.src?.large || p.src?.original,
-              full: p.src?.original,
-              small: p.src?.medium || p.src?.small,
-              thumb: p.src?.small || p.src?.tiny || p.src?.medium,
-            },
-            user: {
-              name: p.photographer || 'Pexels Creator',
-            },
-          }));
-          return res.json({ results });
-        }
-      } else {
-        console.warn(`Pexels API returned status ${response.status}`);
-      }
+      const { results, source } = await performUnifiedImageSearch(query, accessKey);
+      return res.json({ results, source, count: results.length });
     } catch (err: any) {
-      console.warn('Pexels upstream fetch error, using curated presets:', err.message);
+      console.warn('[Image Search Proxy] Unexpected error:', err.message);
+      const { results } = await performUnifiedImageSearch('');
+      return res.json({ results, fallback: true });
     }
-
-    // Graceful fallback if Unsplash rate-limited or offline
-    const CURATED_FALLBACK = [
-      { id: 'curated_1', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400&auto=format&fit=crop&q=80', author: 'Benjamin Davies' },
-      { id: 'curated_2', url: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=400&auto=format&fit=crop&q=80', author: 'Aaron Burden' },
-      { id: 'curated_3', url: 'https://images.unsplash.com/photo-1519817650390-64a93db51149?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1519817650390-64a93db51149?w=400&auto=format&fit=crop&q=80', author: 'Patrick Fore' },
-      { id: 'curated_4', url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&auto=format&fit=crop&q=80', author: 'Sean Oulashin' },
-      { id: 'curated_5', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80', author: 'Eberhard Grossgasteiger' },
-      { id: 'curated_6', url: 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?w=400&auto=format&fit=crop&q=80', author: 'Ben White' },
-      { id: 'curated_7', url: 'https://images.unsplash.com/photo-1490730141103-6cac27aaab94?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1490730141103-6cac27aaab94?w=400&auto=format&fit=crop&q=80', author: 'Mohamed Nohassi' },
-      { id: 'curated_8', url: 'https://images.unsplash.com/photo-1445445290350-18a3b86e0b5b?w=1200&auto=format&fit=crop&q=80', thumb: 'https://images.unsplash.com/photo-1445445290350-18a3b86e0b5b?w=400&auto=format&fit=crop&q=80', author: 'Priscilla Du Preez' },
-    ];
-    return res.json({ results: CURATED_FALLBACK, fallback: true });
   });
 
   // --- AI TUTOR (KING JAMES) API ---

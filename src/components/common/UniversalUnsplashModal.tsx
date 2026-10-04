@@ -60,7 +60,8 @@ export const UniversalUnsplashModal: React.FC<UniversalUnsplashModalProps> = ({
       (p) =>
         p.name.toLowerCase().includes(term) ||
         p.subtitle.toLowerCase().includes(term) ||
-        p.category.toLowerCase().includes(term)
+        p.category.toLowerCase().includes(term) ||
+        (p.tags && p.tags.some(t => t.toLowerCase().includes(term) || term.includes(t.toLowerCase())))
     ).map((p) => ({
       id: p.id,
       url: p.url,

@@ -69,6 +69,9 @@ if (isFirebaseConfigured) {
 if (!authInstance) {
   authInstance = {
     currentUser: null,
+    name: '[DEFAULT]',
+    config: {},
+    _getRecaptchaConfig: () => null,
     onAuthStateChanged: (_a: any, callback: any, errorCallback?: any) => {
       try {
         if (typeof callback === 'function') {

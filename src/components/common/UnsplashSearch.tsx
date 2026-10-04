@@ -32,7 +32,10 @@ export const UnsplashSearch: React.FC<UnsplashSearchProps> = ({
     }
     
     const matched = ALL_CHRISTIAN_PRESET_IMAGES.filter(
-      p => p.name.toLowerCase().includes(term) || p.subtitle.toLowerCase().includes(term) || p.category.toLowerCase().includes(term)
+      p => p.name.toLowerCase().includes(term) || 
+           p.subtitle.toLowerCase().includes(term) || 
+           p.category.toLowerCase().includes(term) ||
+           (p.tags && p.tags.some(t => t.toLowerCase().includes(term) || term.includes(t.toLowerCase())))
     ).map(p => ({
       id: p.id,
       url: p.url,

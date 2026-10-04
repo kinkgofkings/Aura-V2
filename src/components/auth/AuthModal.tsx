@@ -1,9 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sparkles, LogIn, UserPlus, ShieldCheck, AlertCircle, Phone, Mail, Key } from 'lucide-react';
+import { X, Sparkles, LogIn, UserPlus, ShieldCheck, AlertCircle, Phone, Mail, Key, ArrowLeft, Plus, UserCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getDailyQuote } from '../../content/quotes';
 import { soundEffects } from '../../services/audio';
+
+interface GoogleAccount {
+  id: string;
+  name: string;
+  email: string;
+  handle: string;
+  avatarUrl?: string;
+  isFounder?: boolean;
+  isKimberly?: boolean;
+}
+
+const DEFAULT_GOOGLE_ACCOUNTS: GoogleAccount[] = [
+  {
+    id: 'user_tex',
+    name: 'Tex',
+    email: 'lightsouttattootex@gmail.com',
+    handle: 'tex',
+    avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com',
+    isFounder: true,
+  },
+  {
+    id: 'user_kimberly',
+    name: 'Kimberly Coffman',
+    email: 'savdbygrace360@gmail.com',
+    handle: 'kimberly',
+    avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=savdbygrace360@gmail.com',
+    isKimberly: true,
+  },
+  {
+    id: 'user_skylor',
+    name: 'Skylor Bright',
+    email: 'skylorbright07@gmail.com',
+    handle: 'skylor',
+    avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=skylorbright07@gmail.com',
+  },
+  {
+    id: 'user_daphne',
+    name: 'Daphne Coffman',
+    email: 'tex@lightsouttattoo.site',
+    handle: 'babyred',
+    avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=tex@lightsouttattoo.site',
+  }
+];
 
 interface AuthModalProps {
   isOpen?: boolean;
@@ -20,7 +63,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
   
   const dailyQuote = getDailyQuote();
 
-  const [mode, setMode] = useState<'signup' | 'login' | 'phone' | 'verify' | 'forgot'>('signup');
+  const [mode, setMode] = useState<'signup' | 'login' | 'phone' | 'verify' | 'forgot' | 'google-accounts'>('signup');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -28,6 +71,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
   const [phone, setPhone] = useState('');
   const [otpCode, setOtpCode] = useState('');
   
+  const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>(DEFAULT_GOOGLE_ACCOUNTS);
+  const [selectingAccountId, setSelectingAccountId] = useState<string | null>(null);
+  const [isAddingOtherAccount, setIsAddingOtherAccount] = useState(false);
+  const [otherGoogleEmail, setOtherGoogleEmail] = useState('');
+  const [otherGoogleName, setOtherGoogleName] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -37,9 +86,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       setMode(initialMode);
       setErrorMessage(null);
       setSuccessMessage(null);
+      setIsAddingOtherAccount(false);
       if (initialMode === 'phone') {
         setTimeout(() => setupRecaptcha('recaptcha-container'), 500);
       }
+
+      // Fetch dynamic list of Google accounts registered on the server
+      fetch('/api/auth/google/accounts')
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setGoogleAccounts(data);
+          }
+        })
+        .catch(() => {
+          // Keep defaults
+        });
     }
   }, [isOpen, initialMode]);
 
@@ -122,13 +184,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
     setIsSubmitting(false);
   };
 
+  const handleSelectGoogleAccount = async (account: GoogleAccount) => {
+    soundEffects.playTap();
+    setSelectingAccountId(account.id);
+    setErrorMessage(null);
+    setIsSubmitting(true);
+    const result = await signInWithGoogle(account.email);
+    if (result.success) {
+      onClose();
+    } else {
+      setErrorMessage(result.error || 'Failed to sign in with Google account.');
+    }
+    setSelectingAccountId(null);
+    setIsSubmitting(false);
+  };
+
+  const handleAddOtherGoogleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanOther = otherGoogleEmail.trim().toLowerCase();
+    if (!cleanOther || !cleanOther.includes('@')) {
+      setErrorMessage('Please enter a valid Gmail address (e.g. name@gmail.com).');
+      return;
+    }
+    soundEffects.playTap();
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    const result = await signInWithGoogle(cleanOther);
+    if (result.success) {
+      onClose();
+    } else {
+      setErrorMessage(result.error || 'Failed to sign in with Google.');
+    }
+    setIsSubmitting(false);
+  };
+
   const handleSocialLogin = async (provider: 'google' | 'facebook' | 'github') => {
     soundEffects.playTap();
     setErrorMessage(null);
+
+    if (provider === 'google') {
+      setMode('google-accounts');
+      return;
+    }
+
     setIsSubmitting(true);
     let result;
-    if (provider === 'google') result = await signInWithGoogle();
-    else if (provider === 'facebook') result = await signInWithFacebook();
+    if (provider === 'facebook') result = await signInWithFacebook();
     else if (provider === 'github') result = await signInWithGithub();
     
     if (result?.success) {
@@ -183,6 +284,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
             <h2 className="text-2xl font-black text-white mb-2 tracking-tight">
               {mode === 'signup' && 'Join the Sanctuary'}
               {mode === 'login' && 'Welcome Back'}
+              {mode === 'google-accounts' && 'Choose an Account'}
               {mode === 'phone' && 'Phone Login'}
               {mode === 'verify' && (phone ? 'Enter Code' : 'Verify Email')}
               {mode === 'forgot' && 'Reset Password'}
@@ -190,6 +292,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
             <p className="text-slate-400 text-sm">
               {mode === 'signup' && 'Create your account to connect with believers.'}
               {mode === 'login' && 'Enter your credentials to continue.'}
+              {mode === 'google-accounts' && 'Sign in using your linked Gmail / Google profile.'}
               {mode === 'phone' && 'We will send a code to your phone.'}
               {mode === 'verify' && (phone ? 'Enter the 6-digit code we sent.' : 'We sent a verification link to your email.')}
               {mode === 'forgot' && 'Enter your email to receive a reset link.'}
@@ -197,7 +300,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
           </div>
 
           {/* Top Mode Switcher: Create Account vs Sign In */}
-          <div className="p-1 bg-white/5 border border-white/10 rounded-2xl flex gap-1 mb-6">
+          {(mode === 'signup' || mode === 'login') && (
+            <div className="p-1 bg-white/5 border border-white/10 rounded-2xl flex gap-1 mb-6">
             <button
               type="button"
               id="auth-toggle-signup"
@@ -233,6 +337,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
               <span>Sign In</span>
             </button>
           </div>
+          )}
 
           {errorMessage && (
             <div className="mb-6 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start justify-between gap-2 text-red-400 text-sm">
@@ -418,6 +523,154 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                   Reset Password
                 </button>
               </motion.form>
+            )}
+
+            {mode === 'google-accounts' && (
+              <motion.div
+                key="google-accounts"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2.5">
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+                      <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                    </svg>
+                    <span className="text-sm font-bold text-white tracking-wide">Saved Gmail Accounts</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEffects.playTap();
+                      setMode('login');
+                      setErrorMessage(null);
+                    }}
+                    className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold transition-colors"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-[46vh] overflow-y-auto pr-1">
+                  {googleAccounts.map((acct) => (
+                    <button
+                      key={acct.id}
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleSelectGoogleAccount(acct)}
+                      className={`w-full p-3 rounded-2xl border transition-all text-left flex items-center justify-between group cursor-pointer ${
+                        selectingAccountId === acct.id
+                          ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                          : 'bg-white/5 hover:bg-white/10 border-white/10 hover:border-amber-400/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          <img
+                            src={acct.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${acct.email}`}
+                            alt={acct.name}
+                            className="w-10 h-10 rounded-full object-cover bg-slate-800 border border-white/20 group-hover:border-amber-400 transition-colors"
+                          />
+                          {acct.isFounder && (
+                            <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-black flex items-center justify-center shadow">
+                              ★
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-white truncate group-hover:text-amber-300 transition-colors">
+                              {acct.name}
+                            </span>
+                            {acct.isFounder && (
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                Founder
+                              </span>
+                            )}
+                            {acct.isKimberly && (
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                Kimberly
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 truncate">{acct.email}</p>
+                        </div>
+                      </div>
+
+                      {selectingAccountId === acct.id ? (
+                        <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                      ) : (
+                        <span className="text-xs text-slate-500 group-hover:text-amber-400 shrink-0 font-medium transition-colors">
+                          Sign In →
+                        </span>
+                      )}
+                    </button>
+                  ))}
+
+                  {/* Add another Google Account */}
+                  {!isAddingOtherAccount ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingOtherAccount(true)}
+                      className="w-full p-3 rounded-2xl bg-white/[0.02] hover:bg-white/5 border border-dashed border-white/15 flex items-center gap-3 text-slate-300 hover:text-white transition-all text-xs font-semibold cursor-pointer"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400">
+                        <Plus className="w-4 h-4" />
+                      </div>
+                      <span>Use another Gmail account</span>
+                    </button>
+                  ) : (
+                    <form onSubmit={handleAddOtherGoogleSubmit} className="p-3.5 rounded-2xl bg-white/5 border border-amber-500/40 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-400">Enter Gmail Address</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingOtherAccount(false)}
+                          className="text-[11px] text-slate-400 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <input
+                        type="email"
+                        placeholder="e.g. yourname@gmail.com"
+                        value={otherGoogleEmail}
+                        onChange={(e) => setOtherGoogleEmail(e.target.value)}
+                        autoFocus
+                        className="w-full px-3.5 py-2.5 bg-black/40 border border-white/15 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSubmitting || !otherGoogleEmail.trim()}
+                        className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-bold text-xs rounded-xl hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>Sign In with this Gmail</span>
+                      </button>
+                    </form>
+                  )}
+                </div>
+
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEffects.playTap();
+                      setMode('login');
+                      setErrorMessage(null);
+                    }}
+                    className="text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    Or sign in with password instead
+                  </button>
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>
 
