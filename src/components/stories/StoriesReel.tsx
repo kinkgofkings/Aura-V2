@@ -57,6 +57,7 @@ export const StoriesReel: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isCapturingCamera, setIsCapturingCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [isSubmittingStory, setIsSubmittingStory] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -137,15 +138,21 @@ export const StoriesReel: React.FC = () => {
     setIsCapturingCamera(false);
   };
 
-  const handleCreateStory = (e: React.FormEvent) => {
+  const handleCreateStory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingStory) return;
+    setIsSubmittingStory(true);
     const url = storyImageUrl.trim() || PRESET_STORY_IMAGES[0].url;
     soundEffects.playMessageSent();
-    addStory(url, storyCaption.trim() || undefined);
-    stopCamera();
-    setIsAddingStory(false);
-    setStoryImageUrl('');
-    setStoryCaption('');
+    try {
+      await addStory(url, storyCaption.trim() || undefined);
+    } finally {
+      stopCamera();
+      setIsAddingStory(false);
+      setStoryImageUrl('');
+      setStoryCaption('');
+      setIsSubmittingStory(false);
+    }
   };
 
   const handleCloseModal = () => {
@@ -510,10 +517,10 @@ export const StoriesReel: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={!storyImageUrl}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold shadow-lg shadow-amber-500/25 border border-amber-400/30 transition-all hover:scale-105"
+                  disabled={!storyImageUrl || isSubmittingStory}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-amber-500/25 border border-amber-400/30 transition-all hover:scale-105"
                 >
-                  Post Story
+                  {isSubmittingStory ? 'Posting...' : 'Post Story'}
                 </button>
               </div>
             </form>

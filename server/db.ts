@@ -408,8 +408,22 @@ class JSONDatabase {
           // Clean posts
           const cleanPosts = (parsed.posts || []).filter((p: any) => !dummyIds.has(p.authorId) && !['post_1', 'post_2', 'post_3'].includes(p.id));
 
-          // Clean stories
-          const cleanStories = (parsed.stories || []).filter((s: any) => !dummyIds.has(s.userId) && !['story_1', 'story_2', 'story_3'].includes(s.id));
+          // Clean stories and deduplicate slides
+          const cleanStories = (parsed.stories || [])
+            .filter((s: any) => !dummyIds.has(s.userId) && !['story_1', 'story_2', 'story_3'].includes(s.id))
+            .map((s: any) => {
+              if (Array.isArray(s.slides) && s.slides.length > 1) {
+                const seenKeys = new Set<string>();
+                s.slides = s.slides.filter((sl: any) => {
+                  if (!sl || !sl.mediaUrl) return false;
+                  const key = (sl.mediaUrl.length > 200 ? sl.mediaUrl.slice(0, 100) + sl.mediaUrl.slice(-100) : sl.mediaUrl) + '::' + (sl.caption || '');
+                  if (seenKeys.has(key)) return false;
+                  seenKeys.add(key);
+                  return true;
+                });
+              }
+              return s;
+            });
 
           // Clean conversations
           const cleanConversations = (parsed.conversations || []).filter((c: any) => {
@@ -876,17 +890,19 @@ class JSONDatabase {
       }
     }
 
-    const consolidatedStories = Array.from(userStoryMap.values());
-    
-    // CRITICAL: We DO NOT overwrite the raw this.data.stories here. 
-    // getStories() should be non-destructive to the raw data structure.
-    // Overwriting it with aggregated results can drop slides when individual 
-    // entries that *contain* the slides fall off the 24h cutoff, 
-    // depending on which object is processed first.
-    // The consolidation will happen naturally every time getStories() is called.
-
-    // this.data.stories = consolidatedStories; // DELETED: We do not overwrite raw data.
-    // this.scheduleSave(); // DELETED: We do not save an aggregated view as raw data.
+    const consolidatedStories = Array.from(userStoryMap.values()).map((st) => {
+      if (st.slides && st.slides.length > 1) {
+        const seenUrls = new Set<string>();
+        st.slides = st.slides.filter((sl) => {
+          if (!sl || !sl.mediaUrl) return false;
+          const urlKey = sl.mediaUrl.length > 200 ? sl.mediaUrl.slice(0, 100) + sl.mediaUrl.slice(-100) : sl.mediaUrl;
+          if (seenUrls.has(urlKey)) return false;
+          seenUrls.add(urlKey);
+          return true;
+        });
+      }
+      return st;
+    });
 
     return consolidatedStories;
   }
@@ -944,6 +960,16 @@ class JSONDatabase {
           },
         ];
       }
+
+      // DEDUPLICATION: If a slide with the exact same mediaUrl already exists, do not add duplicates!
+      const alreadyHasSlide = existingStory.slides.some(
+        (sl) => sl.mediaUrl === mediaUrl || (mediaUrl.length > 200 && sl.mediaUrl && sl.mediaUrl.slice(0, 100) === mediaUrl.slice(0, 100))
+      );
+
+      if (alreadyHasSlide) {
+        return existingStory;
+      }
+
       // Update author profile details if available
       if (authorName) existingStory.userName = authorName;
       if (authorAvatar) existingStory.userAvatar = authorAvatar;
@@ -956,7 +982,7 @@ class JSONDatabase {
       // Reset seenBy except the author so friends see the new slide indicator
       existingStory.seenByUserIds = [userId];
 
-      this.scheduleSave();
+      this.saveDataDirect(this.data);
       return existingStory;
     } else {
       const newStory: DBStory = {
@@ -972,7 +998,7 @@ class JSONDatabase {
       };
 
       this.data.stories.unshift(newStory);
-      this.scheduleSave();
+      this.saveDataDirect(this.data);
       return newStory;
     }
   }
