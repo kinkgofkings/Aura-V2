@@ -57,10 +57,46 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [viewStory, setViewStory] = useState(false);
+  const [fetchedUser, setFetchedUser] = useState<UserProfile | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(false);
 
-  const targetUser = allUsers.find((u) => u.id === userId);
+  const cleanId = (userId || '').trim();
+  const cleanHandle = cleanId.replace('@', '').toLowerCase();
 
-  if (!targetUser) return null;
+  const targetUser =
+    allUsers.find((u) => u.id === cleanId || u.handle?.toLowerCase() === cleanHandle) ||
+    (currentUser && (currentUser.id === cleanId || currentUser.handle?.toLowerCase() === cleanHandle) ? currentUser : null) ||
+    fetchedUser;
+
+  React.useEffect(() => {
+    if (!targetUser && cleanId) {
+      setIsLoadingUser(true);
+      fetch(`/api/users/${encodeURIComponent(cleanId)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && !data.error && data.id) {
+            setFetchedUser(data);
+          }
+        })
+        .catch((err) => console.warn('Could not fetch user profile:', err))
+        .finally(() => setIsLoadingUser(false));
+    }
+  }, [cleanId, targetUser]);
+
+  if (!targetUser) {
+    if (isLoadingUser) {
+      return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#03040b]/80 backdrop-blur-md" onClick={onClose} />
+          <div className="relative p-8 rounded-3xl bg-[#0b0f24] border border-white/10 flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs text-slate-400">Loading profile...</p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const isSelf = currentUser?.id === targetUser.id;
   const isFollowing = currentUser?.followingUserIds?.includes(targetUser.id);

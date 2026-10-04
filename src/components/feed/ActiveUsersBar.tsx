@@ -15,10 +15,36 @@ export const ActiveUsersBar: React.FC<ActiveUsersBarProps> = ({ onOpenProfile })
   const { allUsers, user: currentUser } = useAuth();
   const { startCall } = useCall();
   const { startDirectConversation } = useChat();
+  const [localUsers, setLocalUsers] = React.useState(allUsers);
 
-  // Filter online users and place current user first
-  const onlineUsers = allUsers
-    .filter((u) => u.status === 'online' || u.status === 'busy')
+  React.useEffect(() => {
+    if (allUsers.length > 0) {
+      setLocalUsers(allUsers);
+    } else {
+      fetch('/api/users')
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocalUsers(data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [allUsers]);
+
+  // Combine localUsers with currentUser so currentUser is always visible and online
+  const combinedList = [...localUsers];
+  if (currentUser && !combinedList.some((u) => u.id === currentUser.id || u.handle === currentUser.handle)) {
+    combinedList.unshift(currentUser);
+  }
+
+  // Treat members as active/online
+  const onlineUsers = combinedList
+    .map((u) => ({
+      ...u,
+      status: currentUser && (u.id === currentUser.id || u.handle === currentUser.handle) ? 'online' : (u.status || 'online'),
+      statusMessage: u.statusMessage || (u.handle === 'tex' ? 'Founder & Admin' : 'Active in Sanctuary'),
+    }))
     .sort((a, b) => (currentUser && a.id === currentUser.id ? -1 : currentUser && b.id === currentUser.id ? 1 : 0));
 
   if (onlineUsers.length === 0) {

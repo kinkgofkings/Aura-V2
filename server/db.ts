@@ -335,14 +335,73 @@ class JSONDatabase {
           // Filter out dummy users
           const cleanUsers = parsed.users.filter((u: any) => !isDummyUser(u));
 
-          // Ensure SEED_USERS (Tex, Daphne, Kimberly, Skylor) are always present
+          // Deduplicate & reconcile Tex user account
+          const isTexMatch = (u: any) => 
+            u.id === 'user_tex' || 
+            u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || 
+            (u.handle && u.handle.toLowerCase() === 'tex') || 
+            (u.email && u.email.toLowerCase().includes('lightsouttattootex'));
+
+          const texCandidates = cleanUsers.filter(isTexMatch);
+          if (texCandidates.length > 0) {
+            // Find custom uploaded avatar if present (base64 image or custom URL)
+            const realAvatar = texCandidates.find((u: any) => u.avatarUrl && (u.avatarUrl.startsWith('data:') || (!u.avatarUrl.includes('dicebear') && !u.avatarUrl.includes('bottts'))))?.avatarUrl;
+            
+            // Prefer the ID that authored posts on the server (rvnvHGDInTWcFdzy9LZpKFsabgz1 or user_tex)
+            const targetTexId = texCandidates.some((u: any) => u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1') ? 'rvnvHGDInTWcFdzy9LZpKFsabgz1' : 'user_tex';
+            const oldTexIds = new Set(texCandidates.map((u: any) => u.id).filter((id: string) => id !== targetTexId));
+
+            const unifiedTex: DBUser = {
+              id: targetTexId,
+              name: 'Tex',
+              handle: 'tex',
+              email: 'lightsouttattootex@gmail.com',
+              avatarUrl: realAvatar || texCandidates[0].avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com',
+              bannerUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80',
+              bio: 'Lights Out Tattoo ✦ Real-time Social & Calling ✨',
+              status: 'online',
+              statusMessage: 'Founder & Admin',
+              followersCount: Math.max(...texCandidates.map((u: any) => u.followersCount || 0), 7),
+              followingCount: Math.max(...texCandidates.map((u: any) => u.followingCount || 0), 4),
+              isVerified: true,
+              joinedAt: '2026-08-01',
+              authProvider: 'google'
+            };
+
+            for (let i = cleanUsers.length - 1; i >= 0; i--) {
+              if (isTexMatch(cleanUsers[i])) {
+                cleanUsers.splice(i, 1);
+              }
+            }
+            cleanUsers.unshift(unifiedTex);
+
+            if (oldTexIds.size > 0 && Array.isArray(parsed.posts)) {
+              parsed.posts.forEach((p: any) => {
+                if (oldTexIds.has(p.authorId)) {
+                  p.authorId = targetTexId;
+                  p.authorName = 'Tex';
+                  p.authorHandle = 'tex';
+                  if (realAvatar) p.authorAvatar = realAvatar;
+                }
+              });
+            }
+          }
+
+          // Ensure SEED_USERS (Tex, Daphne, Kimberly, Skylor) are present without duplicating
           SEED_USERS.forEach((seedUser) => {
-            const idx = cleanUsers.findIndex((u: any) => u.id === seedUser.id || u.email.toLowerCase() === seedUser.email.toLowerCase());
+            const isMatch = (u: any) => 
+              u.id === seedUser.id || 
+              (u.email && u.email.toLowerCase() === seedUser.email.toLowerCase()) || 
+              (seedUser.handle === 'tex' && u.handle?.toLowerCase() === 'tex');
+
+            const idx = cleanUsers.findIndex(isMatch);
             if (idx === -1) {
               cleanUsers.push({ ...seedUser, status: 'online' });
             } else {
-              // Ensure online status
               cleanUsers[idx].status = 'online';
+              if (cleanUsers[idx].handle?.toLowerCase() === 'tex' && (!cleanUsers[idx].email || !cleanUsers[idx].email.includes('@'))) {
+                cleanUsers[idx].email = seedUser.email;
+              }
             }
           });
 
@@ -437,15 +496,28 @@ class JSONDatabase {
   }
 
   public getUserById(id: string): DBUser | undefined {
+    if (id === 'user_tex' || id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || id.toLowerCase() === 'tex') {
+      const tex = this.data.users.find((u) => u.handle.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || u.id === 'user_tex');
+      if (tex) return tex;
+    }
     return this.data.users.find((u) => u.id === id);
   }
 
   public getUserByEmail(email: string): DBUser | undefined {
-    return this.data.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    const clean = (email || '').trim().toLowerCase();
+    if (clean.includes('lightsouttattootex') || clean === 'tex') {
+      const tex = this.data.users.find((u) => u.handle.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || u.email.toLowerCase() === 'lightsouttattootex@gmail.com');
+      if (tex) return tex;
+    }
+    return this.data.users.find((u) => u.email.toLowerCase() === clean);
   }
 
   public getUserByHandle(handle: string): DBUser | undefined {
-    const clean = handle.replace('@', '').toLowerCase();
+    const clean = handle.replace('@', '').trim().toLowerCase();
+    if (clean === 'tex') {
+      const tex = this.data.users.find((u) => u.handle.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1');
+      if (tex) return tex;
+    }
     return this.data.users.find((u) => u.handle.toLowerCase() === clean);
   }
 
@@ -481,20 +553,38 @@ class JSONDatabase {
   }
 
   public updateUser(id: string, updates: Partial<DBUser>): DBUser | null {
-    const index = this.data.users.findIndex((u) => u.id === id);
+    let index = this.data.users.findIndex((u) => u.id === id);
+    if (index === -1 && (id === 'user_tex' || id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || id.toLowerCase() === 'tex')) {
+      index = this.data.users.findIndex((u) => u.handle.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || u.id === 'user_tex');
+    }
+    if (index === -1) {
+      index = this.data.users.findIndex((u) => u.handle.toLowerCase() === id.replace('@', '').toLowerCase());
+    }
     if (index === -1) return null;
 
     const updated = { ...this.data.users[index], ...updates };
     this.data.users[index] = updated;
 
+    // If avatar was updated, update all posts authored by this user
+    if (updates.avatarUrl) {
+      const userHandle = updated.handle.toLowerCase();
+      const userId = updated.id;
+      this.data.posts.forEach((p) => {
+        if (p.authorId === userId || (p.authorHandle && p.authorHandle.toLowerCase() === userHandle) || (userHandle === 'tex' && p.authorName === 'Tex')) {
+          p.authorAvatar = updates.avatarUrl!;
+          p.authorName = updated.name;
+        }
+      });
+    }
+
     // Update in conversations participant lists as well
     this.data.conversations.forEach((conv) => {
       if (Array.isArray(conv.participants)) {
-        if (Array.isArray(conv.participants)) { conv.participants = conv.participants.map((p) => (p.id === id ? updated : p)); }
+        conv.participants = conv.participants.map((p) => (p.id === id || p.id === updated.id ? updated : p));
       }
     });
 
-    this.scheduleSave();
+    this.saveDataDirect(this.data);
     return updated;
   }
 

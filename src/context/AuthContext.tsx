@@ -23,6 +23,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, query, getDocs, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { notificationService } from '../services/notifications';
+import { api } from '../services/api';
 
 declare global {
   interface Window {
@@ -174,13 +175,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 } else {
                   // Fallback without Firestore
                   const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
+                  const savedCustomAvatar = (() => {
+                    try {
+                      const raw = localStorage.getItem('aura_active_user');
+                      if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (parsed.avatarUrl && (parsed.avatarUrl.startsWith('data:') || (!parsed.avatarUrl.includes('dicebear') && !parsed.avatarUrl.includes('bottts')))) {
+                          return parsed.avatarUrl;
+                        }
+                      }
+                    } catch {}
+                    return null;
+                  })();
+
                   const fallbackProfile: UserProfile = {
                     id: firebaseUser.uid,
                     name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'Believer'),
                     email: firebaseUser.email || '',
                     handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
-                    avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
-                    bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
+                    avatarUrl: savedCustomAvatar || firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
+                    bio: isTexAdmin ? 'Lights Out Tattoo ✦ Real-time Social & Calling ✨' : 'Just joined the sanctuary.',
                     status: 'online',
                     followersCount: isTexAdmin ? 777 : 0,
                     followingCount: isTexAdmin ? 12 : 0,
@@ -192,15 +206,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
               } catch (dbErr) {
                 console.error('Error fetching/setting user profile in Firestore:', dbErr);
-                // Fallback to local profile constructed directly from firebaseUser
                 const isTexAdmin = (firebaseUser.email || '').toLowerCase().includes('lightsouttattootex');
+                const savedCustomAvatar = (() => {
+                  try {
+                    const raw = localStorage.getItem('aura_active_user');
+                    if (raw) {
+                      const parsed = JSON.parse(raw);
+                      if (parsed.avatarUrl && (parsed.avatarUrl.startsWith('data:') || (!parsed.avatarUrl.includes('dicebear') && !parsed.avatarUrl.includes('bottts')))) {
+                        return parsed.avatarUrl;
+                      }
+                    }
+                  } catch {}
+                  return null;
+                })();
+
                 const fallbackProfile: UserProfile = {
                   id: firebaseUser.uid,
                   name: isTexAdmin ? 'Tex' : (firebaseUser.displayName || 'Believer'),
                   email: firebaseUser.email || '',
                   handle: isTexAdmin ? 'tex' : ((firebaseUser.email?.split('@')[0] || firebaseUser.uid).toLowerCase()),
-                  avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
-                  bio: isTexAdmin ? 'Aura Founder & Administrator. Sanctuary architect.' : 'Just joined the sanctuary.',
+                  avatarUrl: savedCustomAvatar || firebaseUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${isTexAdmin ? 'TexAdminAura' : firebaseUser.uid}`,
+                  bio: isTexAdmin ? 'Lights Out Tattoo ✦ Real-time Social & Calling ✨' : 'Just joined the sanctuary.',
                   status: 'online',
                   followersCount: isTexAdmin ? 777 : 0,
                   followingCount: isTexAdmin ? 12 : 0,
@@ -238,6 +264,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (unsubscribeUsers) unsubscribeUsers();
       unsubscribeAuth();
     };
+  }, []);
+
+  useEffect(() => {
+    // Synchronize users from backend API
+    fetch('/api/users')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAllUsers(data);
+          const activeUserRaw = localStorage.getItem('aura_active_user');
+          if (activeUserRaw) {
+            try {
+              const parsed = JSON.parse(activeUserRaw);
+              if (parsed && (parsed.handle === 'tex' || (parsed.email && parsed.email.includes('lightsouttattootex')))) {
+                const serverTex = data.find((u: any) => u.handle?.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1');
+                if (serverTex?.avatarUrl && (serverTex.avatarUrl.startsWith('data:') || !serverTex.avatarUrl.includes('dicebear'))) {
+                  setUserAndCache({ ...parsed, avatarUrl: serverTex.avatarUrl, name: 'Tex', handle: 'tex' });
+                }
+              }
+            } catch {}
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Initial fetch users warning:', err);
+      });
   }, []);
 
   const openAuthModal = () => setIsAuthModalOpen(true);
@@ -587,13 +639,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!user) return;
-    const userDocRef = doc(db, 'users', user.id);
+    const updatedUser = { ...user, ...updates };
+    setUserAndCache(updatedUser);
+
+    // 1. Persist directly to backend database
     try {
-      await updateDoc(userDocRef, updates);
-    } catch (e) {
-      console.warn('Firestore updateDoc warning:', e);
+      await api.updateProfile(user.id, updates);
+    } catch (apiErr) {
+      console.warn('Backend updateProfile warning:', apiErr);
     }
-    setUserAndCache({ ...user, ...updates });
+
+    // 2. Persist to Firestore if configured
+    if (isFirebaseConfigured && db) {
+      try {
+        const userDocRef = doc(db, 'users', user.id);
+        await updateDoc(userDocRef, updates);
+      } catch (e) {
+        console.warn('Firestore updateDoc warning:', e);
+      }
+    }
+
+    // 3. Immediately update in allUsers state
+    setAllUsers((prev) => prev.map((u) => (u.id === user.id || u.handle === user.handle ? { ...u, ...updates } : u)));
   };
 
   const setUserStatus = async (status: UserStatus, statusMessage?: string) => {
@@ -609,31 +676,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? (user.followingUserIds || []).filter((id) => id !== targetUserId)
       : [...(user.followingUserIds || []), targetUserId];
 
-    try {
-      const userRef = doc(db, 'users', user.id);
-      const targetUserRef = doc(db, 'users', targetUserId);
-      
-      // Update current user
-      await updateDoc(userRef, {
-        followingUserIds: isFollowing ? arrayRemove(targetUserId) : arrayUnion(targetUserId)
-      });
-      
-      // Get target user to update their followers count
-      const targetDoc = await getDoc(targetUserRef);
-      if (targetDoc.exists()) {
-        const targetData = targetDoc.data();
-        const currentFollowers = targetData.followersCount || 0;
-        await updateDoc(targetUserRef, {
-          followersCount: isFollowing ? Math.max(0, currentFollowers - 1) : currentFollowers + 1
-        });
-      }
+    const updatedUser = { ...user, followingUserIds: newFollowing };
+    setUserAndCache(updatedUser);
 
-      setUserAndCache({ ...user, followingUserIds: newFollowing });
-      return true;
-    } catch (e) {
-      console.error('Error following user:', e);
-      return false;
+    // 1. Call backend API
+    try {
+      const res = await api.followUser(targetUserId, user.id);
+      if (res) {
+        setAllUsers((prev) =>
+          prev.map((u) => {
+            if (u.id === targetUserId) {
+              return { ...u, followersCount: res.targetFollowersCount };
+            }
+            if (u.id === user.id) {
+              return { ...u, followingCount: res.currentFollowingCount, followingUserIds: newFollowing };
+            }
+            return u;
+          })
+        );
+        return true;
+      }
+    } catch (apiErr) {
+      console.warn('Backend follow warning:', apiErr);
     }
+
+    // 2. Fallback to Firestore if configured
+    if (isFirebaseConfigured && db) {
+      try {
+        const userRef = doc(db, 'users', user.id);
+        const targetUserRef = doc(db, 'users', targetUserId);
+        
+        await updateDoc(userRef, {
+          followingUserIds: isFollowing ? arrayRemove(targetUserId) : arrayUnion(targetUserId)
+        });
+        
+        const targetDoc = await getDoc(targetUserRef);
+        if (targetDoc.exists()) {
+          const targetData = targetDoc.data();
+          const currentFollowers = targetData.followersCount || 0;
+          await updateDoc(targetUserRef, {
+            followersCount: isFollowing ? Math.max(0, currentFollowers - 1) : currentFollowers + 1
+          });
+        }
+      } catch (e) {
+        console.error('Error following user in firestore:', e);
+      }
+    }
+
+    return true;
   };
 
   return (
