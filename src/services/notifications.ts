@@ -98,34 +98,44 @@ class NotificationService {
     // 2. Play subtle notification sound
     this.playSound(payload.type);
 
-    // 3. Trigger native OS notification if allowed and app is not focused
-    if (typeof window !== 'undefined' && document.hidden) {
-      const status = await this.getPermissionStatus();
-      if (status === 'granted' && 'Notification' in window) {
+    // 3. Dispatch directly to Android / Device Native Notification Shade
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const isGranted = Notification.permission === 'granted';
+      if (isGranted) {
         try {
-          // Check if we have a service worker for better mobile integration
+          const notifOptions: any = {
+            body: payload.body,
+            icon: payload.avatar || '/icon.png',
+            badge: '/icon.png',
+            vibrate: [250, 100, 250],
+            tag: payload.id || `aura_${payload.type}_${Date.now()}`,
+            renotify: true,
+            data: {
+              url: payload.actionId || payload.data?.url || '/',
+              type: payload.type,
+              ...payload.data,
+            },
+          };
+
+          // On Android / mobile browsers, ServiceWorkerRegistration.showNotification() is strictly required
           if ('serviceWorker' in navigator) {
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (reg) {
-              (reg as any).showNotification(payload.title, {
-                body: payload.body,
-                icon: '/icon.png',
-                badge: '/icon.png',
-                vibrate: [200, 100, 200],
-                tag: payload.type, // Group similar notifications
-                data: payload.data
-              });
-              return;
+            try {
+              const reg = await navigator.serviceWorker.ready;
+              if (reg && reg.showNotification) {
+                await reg.showNotification(payload.title, notifOptions);
+                return;
+              }
+            } catch (swErr) {
+              console.debug('Service worker notification attempt:', swErr);
             }
           }
 
-          // Fallback to standard web notification
-          new Notification(payload.title, {
-            body: payload.body,
-            icon: '/icon.png'
-          });
+          // Fallback for desktop Safari / Firefox
+          if (typeof Notification === 'function') {
+            new Notification(payload.title, notifOptions);
+          }
         } catch (e) {
-          console.warn('Native notification failed:', e);
+          console.warn('Native device notification dispatch failed:', e);
         }
       }
     }

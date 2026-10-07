@@ -408,17 +408,16 @@ class JSONDatabase {
           // Clean posts
           const cleanPosts = (parsed.posts || []).filter((p: any) => !dummyIds.has(p.authorId) && !['post_1', 'post_2', 'post_3'].includes(p.id));
 
-          // Clean stories and deduplicate slides
+          // Clean stories and deduplicate identical slides
           const cleanStories = (parsed.stories || [])
             .filter((s: any) => !dummyIds.has(s.userId) && !['story_1', 'story_2', 'story_3'].includes(s.id))
             .map((s: any) => {
               if (Array.isArray(s.slides) && s.slides.length > 1) {
-                const seenKeys = new Set<string>();
+                const seenMedia = new Set<string>();
                 s.slides = s.slides.filter((sl: any) => {
                   if (!sl || !sl.mediaUrl) return false;
-                  const key = (sl.mediaUrl.length > 200 ? sl.mediaUrl.slice(0, 100) + sl.mediaUrl.slice(-100) : sl.mediaUrl) + '::' + (sl.caption || '');
-                  if (seenKeys.has(key)) return false;
-                  seenKeys.add(key);
+                  if (seenMedia.has(sl.mediaUrl)) return false;
+                  seenMedia.add(sl.mediaUrl);
                   return true;
                 });
               }
@@ -895,9 +894,8 @@ class JSONDatabase {
         const seenUrls = new Set<string>();
         st.slides = st.slides.filter((sl) => {
           if (!sl || !sl.mediaUrl) return false;
-          const urlKey = sl.mediaUrl.length > 200 ? sl.mediaUrl.slice(0, 100) + sl.mediaUrl.slice(-100) : sl.mediaUrl;
-          if (seenUrls.has(urlKey)) return false;
-          seenUrls.add(urlKey);
+          if (seenUrls.has(sl.mediaUrl)) return false;
+          seenUrls.add(sl.mediaUrl);
           return true;
         });
       }
@@ -961,9 +959,9 @@ class JSONDatabase {
         ];
       }
 
-      // DEDUPLICATION: If a slide with the exact same mediaUrl already exists, do not add duplicates!
+      // DEDUPLICATION: Only reject if the EXACT same photo content was submitted within the last 15 seconds (network retry)
       const alreadyHasSlide = existingStory.slides.some(
-        (sl) => sl.mediaUrl === mediaUrl || (mediaUrl.length > 200 && sl.mediaUrl && sl.mediaUrl.slice(0, 100) === mediaUrl.slice(0, 100))
+        (sl) => sl.mediaUrl === mediaUrl && Math.abs(sl.createdAt - now) < 15000
       );
 
       if (alreadyHasSlide) {

@@ -128,14 +128,13 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (!existingServer) {
               serverMap.set(localStory.userId, localStory);
             } else {
-              // Server has the story, ensure all slides in existingServer are unique by mediaUrl
+              // Server has the story, ensure all slides in existingServer are unique by exact mediaUrl
               if (existingServer.slides && existingServer.slides.length > 0) {
                 const seenUrls = new Set<string>();
                 existingServer.slides = existingServer.slides.filter((sl) => {
                   if (!sl || !sl.mediaUrl) return false;
-                  const key = sl.mediaUrl.length > 200 ? sl.mediaUrl.slice(0, 100) + sl.mediaUrl.slice(-100) : sl.mediaUrl;
-                  if (seenUrls.has(key)) return false;
-                  seenUrls.add(key);
+                  if (seenUrls.has(sl.mediaUrl)) return false;
+                  seenUrls.add(sl.mediaUrl);
                   return true;
                 });
               }
@@ -390,15 +389,14 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const currentUser = userRef.current || user;
     if (!currentUser) return;
 
-    // Prevent duplicate in-flight uploads for the same photo
-    const mediaKey = mediaUrl.length > 200 ? mediaUrl.slice(0, 100) + mediaUrl.slice(-100) : mediaUrl;
-    if (inFlightStoryUploads.current.has(mediaKey)) {
+    // Prevent duplicate in-flight network retries for the exact same upload
+    if (inFlightStoryUploads.current.has(mediaUrl)) {
       return;
     }
-    inFlightStoryUploads.current.add(mediaKey);
+    inFlightStoryUploads.current.add(mediaUrl);
     setTimeout(() => {
-      inFlightStoryUploads.current.delete(mediaKey);
-    }, 15000);
+      inFlightStoryUploads.current.delete(mediaUrl);
+    }, 4000);
 
     const now = Date.now();
     const slideId = 'slide_' + now + '_' + Math.random().toString(36).substr(2, 4);
@@ -426,9 +424,9 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 },
               ];
 
-        // Deduplication: do not add duplicate slide if already present
+        // Deduplication: only reject if the exact same photo was added within the last 15 seconds
         const alreadyInSlides = existingSlides.some(
-          (sl) => sl.mediaUrl === mediaUrl || (mediaUrl.length > 200 && sl.mediaUrl && sl.mediaUrl.slice(0, 100) === mediaUrl.slice(0, 100))
+          (sl) => sl.mediaUrl === mediaUrl && Math.abs(sl.createdAt - now) < 15000
         );
         if (alreadyInSlides) {
           return prev;

@@ -258,8 +258,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         setConversations((prev) =>
-          prev.map((c) => (c.id === msg.conversationId ? { ...c, lastMessage: msg, updatedAt: msg.timestamp } : c))
+          prev.map((c) => (c.id === msg.conversationId ? { ...c, lastMessage: msg, updatedAt: msg.timestamp, unreadCount: (c.unreadCount || 0) + (msg.senderId !== user?.id ? 1 : 0) } : c))
         );
+
+        if (msg.senderId !== user?.id) {
+          notificationService.notify({
+            type: 'message',
+            title: msg.senderName || 'New Chat Message',
+            body: msg.content || (msg.mediaUrl ? 'Sent an attachment' : 'New message'),
+            avatar: msg.senderAvatar,
+            playSound: true,
+            actionId: `chat_${msg.conversationId}`,
+            data: {
+              url: `/?tab=chat&conv=${msg.conversationId}`,
+              conversationId: msg.conversationId,
+            },
+          });
+        }
       } else if (type === 'message_reaction') {
         const { conversationId, messageId, emoji, userId } = payload;
         setMessages((prev) => {

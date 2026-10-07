@@ -37,40 +37,88 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isZoomed, setIsZoomed] = useState(false);
+  const prevIsOpenRef = React.useRef(false);
 
+  // Initialize currentIndex ONLY when the modal transitions from closed to open
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       setCurrentIndex(Math.max(0, Math.min(initialIndex, (images?.length || 1) - 1)));
       setIsZoomed(false);
     }
-  }, [isOpen, initialIndex, images]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, initialIndex]);
 
   const handleNext = useCallback(
-    (e?: React.MouseEvent) => {
+    (e?: React.MouseEvent | React.TouchEvent) => {
       e?.stopPropagation();
-      if (images.length <= 1) return;
+      if (!images || images.length <= 1) return;
       soundEffects.playTap();
       setIsZoomed(false);
       setCurrentIndex((prev) => (prev + 1) % images.length);
     },
-    [images.length]
+    [images]
   );
 
   const handlePrev = useCallback(
-    (e?: React.MouseEvent) => {
+    (e?: React.MouseEvent | React.TouchEvent) => {
       e?.stopPropagation();
-      if (images.length <= 1) return;
+      if (!images || images.length <= 1) return;
       soundEffects.playTap();
       setIsZoomed(false);
       setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
     },
-    [images.length]
+    [images]
   );
 
   const handleClose = useCallback(() => {
     soundEffects.playTap();
     onClose();
   }, [onClose]);
+
+  // Touch Swipe Gesture Handling (Left/Right to navigate, Down to close)
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+  const touchStartTime = React.useRef<number>(0);
+  const hasMovedRef = React.useRef(false);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (isZoomed || e.touches.length !== 1) return;
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
+    hasMovedRef.current = false;
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const diffX = Math.abs(e.touches[0].clientX - touchStartX.current);
+    const diffY = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (diffX > 10 || diffY > 10) {
+      hasMovedRef.current = true;
+    }
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (isZoomed || touchStartX.current === null || touchStartY.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartX.current;
+    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+    const elapsed = Date.now() - touchStartTime.current;
+
+    // Horizontal swipe threshold: 35px, elapsed < 800ms
+    if (Math.abs(diffX) > 35 && Math.abs(diffX) > Math.abs(diffY) * 1.1 && elapsed < 800) {
+      if (diffX < 0) {
+        handleNext();
+      } else {
+        handlePrev();
+      }
+    } else if (diffY > 90 && Math.abs(diffY) > Math.abs(diffX) * 1.5 && elapsed < 800) {
+      // Swiping downward dismisses the lightbox
+      handleClose();
+    }
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -196,17 +244,24 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
 
           {/* Center Image Stage */}
           <div
+            id="lightbox-image-stage"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
             onClick={(e) => {
               e.stopPropagation();
-              setIsZoomed(!isZoomed);
+              if (!hasMovedRef.current) {
+                setIsZoomed(!isZoomed);
+              }
             }}
-            className="relative flex-1 min-h-0 w-full flex items-center justify-center overflow-auto my-2 cursor-zoom-in"
+            className="relative flex-1 min-h-0 w-full flex items-center justify-center overflow-auto my-2 cursor-zoom-in touch-pan-y select-none"
           >
             {/* Previous Button */}
             {images.length > 1 && (
               <button
+                type="button"
                 onClick={handlePrev}
-                className="absolute left-2 sm:left-4 z-20 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white border border-white/20 transition-all backdrop-blur-md hover:scale-110 shadow-2xl"
+                className="absolute left-2 sm:left-4 z-30 p-3 rounded-full bg-black/75 hover:bg-black/90 active:bg-amber-600 text-white border border-white/20 transition-all backdrop-blur-md hover:scale-110 shadow-2xl touch-manipulation"
                 title="Previous photo"
               >
                 <ChevronLeft className="w-6 h-6" />
@@ -232,8 +287,9 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
             {/* Next Button */}
             {images.length > 1 && (
               <button
+                type="button"
                 onClick={handleNext}
-                className="absolute right-2 sm:right-4 z-20 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white border border-white/20 transition-all backdrop-blur-md hover:scale-110 shadow-2xl"
+                className="absolute right-2 sm:right-4 z-30 p-3 rounded-full bg-black/75 hover:bg-black/90 active:bg-amber-600 text-white border border-white/20 transition-all backdrop-blur-md hover:scale-110 shadow-2xl touch-manipulation"
                 title="Next photo"
               >
                 <ChevronRight className="w-6 h-6" />

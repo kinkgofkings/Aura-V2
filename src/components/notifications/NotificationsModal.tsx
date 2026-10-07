@@ -315,14 +315,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, 
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 min-h-0">
           {/* Notification Permission Status Banner if not granted */}
           {!isActuallyGranted && (
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2.5 mb-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center flex-shrink-0">
-                  <Bell className="w-3.5 h-3.5" />
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-red-950/40 via-amber-950/30 to-orange-950/40 border border-red-500/30 flex items-center justify-between gap-2.5 mb-2 shadow-lg">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">Browser Notifications Off</p>
-                  <p className="text-[10px] text-slate-300 truncate">Enable to get sound & push alerts for incoming calls</p>
+                  <p className="text-xs font-bold text-white">Device Notifications Off</p>
+                  <p className="text-[11px] text-slate-300 truncate">Enable to get alerts in your device slide-out menu & home badge</p>
                 </div>
               </div>
               <button
@@ -331,26 +331,27 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, 
                   await requestNotificationPermission();
                   await checkAllPermissions();
                 }}
-                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md flex-shrink-0 transition-all active:scale-95"
+                className="px-3.5 py-2 rounded-xl bg-[#ef4444] hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-500/30 flex-shrink-0 transition-all active:scale-95"
               >
-                Allow Alerts
+                Enable Alerts
               </button>
             </div>
           )}
 
           {isActuallyGranted && (
-            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between text-[11px] mb-2">
+            <div className="px-3.5 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between text-[11px] mb-2 shadow-sm">
               <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Push & Chimes Enabled</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Device Notifications & Red Badge Active</span>
               </span>
               <button
                 type="button"
                 onClick={sendTestNotification}
-                className="text-slate-300 hover:text-white flex items-center gap-1 text-[10px] font-medium"
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white flex items-center gap-1.5 text-[10px] font-bold border border-emerald-500/30 transition-all"
+                title="Send a notification into your device slide-out drawer"
               >
                 <Volume2 className="w-3 h-3 text-emerald-400" />
-                <span>Test Alert</span>
+                <span>Test Device Alert</span>
               </button>
             </div>
           )}

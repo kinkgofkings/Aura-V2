@@ -84,8 +84,8 @@ self.addEventListener('push', (event) => {
     const isVideo = data.isVideo !== false;
     const callOptions = {
       body: data.body || `${data.callerName || 'Someone'} is calling you on Aura...`,
-      icon: data.callerAvatar || data.icon || '/icons/icon.jpg',
-      badge: '/icons/icon.jpg',
+      icon: data.callerAvatar || data.icon || '/icon.png',
+      badge: '/icon.png',
       tag: data.roomId ? `call_${data.roomId}` : 'incoming_call',
       renotify: true,
       requireInteraction: true,
@@ -102,6 +102,10 @@ self.addEventListener('push', (event) => {
         isVideo: isVideo
       }
     };
+
+    if ('setAppBadge' in self.navigator) {
+      self.navigator.setAppBadge().catch(() => {});
+    }
 
     event.waitUntil(
       self.registration.showNotification(
@@ -125,8 +129,8 @@ self.addEventListener('push', (event) => {
         if (data.isMissed) {
           return self.registration.showNotification(`Missed Call from ${data.callerName || 'Someone'}`, {
             body: 'Tap to view in Aura and call back',
-            icon: data.callerAvatar || '/icons/icon.jpg',
-            badge: '/icons/icon.jpg',
+            icon: data.callerAvatar || '/icon.png',
+            badge: '/icon.png',
             tag: `missed_${data.roomId || Date.now()}`,
             data: { url: '/?tab=chat' }
           });
@@ -138,16 +142,21 @@ self.addEventListener('push', (event) => {
 
   // Standard Notification Event
   const options = {
-    body: data.body || 'New message on Aura',
-    icon: data.icon || '/icons/icon.jpg',
-    badge: '/icons/icon.jpg',
-    vibrate: [200, 100, 200],
+    body: data.body || 'New update on Aura',
+    icon: data.icon || '/icon.png',
+    badge: '/icon.png',
+    vibrate: [250, 100, 250],
+    tag: data.tag || `aura_${Date.now()}`,
+    renotify: true,
     data: { url: data.url || data.actionId || '/' },
     actions: [
-      { action: 'open', title: 'Open Aura' },
-      { action: 'dismiss', title: 'Dismiss' }
+      { action: 'open', title: 'Open Aura' }
     ]
   };
+
+  if ('setAppBadge' in self.navigator) {
+    self.navigator.setAppBadge().catch(() => {});
+  }
 
   event.waitUntil(
     self.registration.showNotification(data.title || 'Aura', options)

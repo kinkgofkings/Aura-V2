@@ -3,6 +3,7 @@ import { AppNotification } from '../types';
 import { notificationService } from '../services/notifications';
 import { offlineStorage, STORAGE_KEYS } from '../services/offlineStorage';
 import { soundEffects } from '../services/audio';
+import { updateDeviceAppBadge, clearDeviceAppBadge } from '../utils/appBadge';
 
 interface NotificationContextType {
   notifications: AppNotification[];
@@ -68,6 +69,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  // Sync with Android Home Screen App Badge (W3C App Badging API) & Favicon/Title
+  useEffect(() => {
+    updateDeviceAppBadge(unreadCount);
+  }, [unreadCount]);
 
   const openNotifications = () => {
     soundEffects.playTap();

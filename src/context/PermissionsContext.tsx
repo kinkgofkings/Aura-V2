@@ -3,6 +3,7 @@ import { soundEffects } from '../services/audio';
 import { notificationService } from '../services/notifications';
 import { offlineStorage } from '../services/offlineStorage';
 import { dispatchDevotionalNow } from '../hooks/useDevotionalNotifications';
+import { updateDeviceAppBadge } from '../utils/appBadge';
 
 export type PermissionState = 'prompt' | 'granted' | 'denied' | 'unsupported';
 export type PwaInstallState = 'available' | 'installed' | 'ios_manual' | 'unsupported';
@@ -128,36 +129,37 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const checkAllPermissions = useCallback(async () => {
     if (typeof window === 'undefined') return;
 
-    // Direct synchronous check for Notification.permission
-    if ('Notification' in window && window.Notification.permission === 'granted') {
-      setNotificationStatus('granted');
-    } else {
-      const notifStatus = await notificationService.getPermissionStatus();
-      if (notifStatus === 'granted' || localStorage.getItem('aura_perms_notif') === 'granted') {
+    // Direct check for native Notification.permission
+    if ('Notification' in window) {
+      if (window.Notification.permission === 'granted') {
         setNotificationStatus('granted');
-      } else if (notifStatus === 'denied') {
+      } else if (window.Notification.permission === 'denied') {
         setNotificationStatus('denied');
-      } else if (notifStatus === 'prompt' || notifStatus === 'default' || notifStatus === 'prompt-with-rationale') {
-        setNotificationStatus('prompt');
       } else {
-        setNotificationStatus('unsupported');
+        setNotificationStatus('prompt');
       }
+    } else {
+      setNotificationStatus('unsupported');
     }
 
     // Modern permissions API query if available
     if (navigator.permissions && navigator.permissions.query) {
       try {
         const notifPerm = await navigator.permissions.query({ name: 'notifications' as any }).catch(() => null);
-        if (notifPerm && localStorage.getItem('aura_perms_notif') !== 'granted') {
+        if (notifPerm) {
           if (notifPerm.state === 'granted') setNotificationStatus('granted');
           else if (notifPerm.state === 'denied') setNotificationStatus('denied');
           else setNotificationStatus('prompt');
+
           notifPerm.onchange = () => {
             if (notifPerm.state === 'granted') {
               setNotificationStatus('granted');
-              localStorage.setItem('aura_perms_notif', 'granted');
-            } else if (notifPerm.state === 'denied') setNotificationStatus('denied');
-            else setNotificationStatus('prompt');
+              try { localStorage.setItem('aura_perms_notif', 'granted'); } catch {}
+            } else if (notifPerm.state === 'denied') {
+              setNotificationStatus('denied');
+            } else {
+              setNotificationStatus('prompt');
+            }
           };
         }
 
@@ -280,14 +282,14 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     let isGranted = false;
     try {
       const granted = await notificationService.requestPermission();
-      const currentStatus = await notificationService.getPermissionStatus();
       isGranted =
-        granted ||
-        currentStatus === 'granted' ||
-        (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted');
+        granted &&
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        window.Notification.permission === 'granted';
     } catch (err) {
-      console.warn('requestNotificationPermission error, fallback to in-app:', err);
-      isGranted = true;
+      console.warn('requestNotificationPermission error:', err);
+      isGranted = false;
     }
 
     if (isGranted) {
@@ -305,32 +307,22 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       notificationService.notify({
         type: 'system',
-        title: 'Alerts & Daily Verses Active 🕊️',
-        body: 'You will receive on-screen alerts, daily scriptures, and uplifting audio chimes!',
+        title: 'Device Alerts Active! 🕊️',
+        body: 'Aura notifications are now active in your device slide-out drawer.',
         playSound: true,
-        actionId: 'devotional-nav',
+        actionId: 'feed',
       });
 
       // Deliver current daily verse immediately so user sees and hears it working
       dispatchDevotionalNow();
       return true;
     } else {
-      // Fallback: enable in-app notifications
-      setNotificationStatus('granted');
-      try {
-        localStorage.setItem('aura_perms_notif', 'granted');
-      } catch {}
-      soundEffects.playSuccessTone();
-
-      notificationService.notify({
-        type: 'system',
-        title: 'In-App Alerts Enabled ✨',
-        body: 'In-app chimes & daily verses are active! (To receive native OS push when closed, allow notifications in your browser address bar).',
-        playSound: true,
-        actionId: 'devotional-nav',
-      });
-      dispatchDevotionalNow();
-      return true;
+      if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'denied') {
+        setNotificationStatus('denied');
+      } else {
+        setNotificationStatus('prompt');
+      }
+      return false;
     }
   };
 
@@ -392,10 +384,12 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     soundEffects.playMessageReceived();
     notificationService.notify({
       type: 'chat',
-      title: 'Aura Test Notification ✨',
-      body: 'Push & chime notifications are working smoothly across your device.',
+      title: 'Aura Sanctuary ✨',
+      body: 'Check your device slide-out menu! Notifications and red badge are now active.',
       playSound: true,
+      actionId: 'feed',
     });
+    updateDeviceAppBadge(1);
   };
 
   const sendTestDevotionalNotification = () => {

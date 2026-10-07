@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, SunDim, Moon, Heart, ChevronRight, BookOpen, CheckCircle2 } from 'lucide-react';
+import { Sun, SunDim, Moon, Heart, ChevronRight, BookOpen, CheckCircle2, Share2, Sparkles, Loader2, Send } from 'lucide-react';
 import { getCurrentDevotional, DailyDevotional } from '../../content/devotionals';
+import { useSocial } from '../../context/SocialContext';
+import { useAuth } from '../../context/AuthContext';
+import { soundEffects } from '../../services/audio';
+import { generateDevotionalCardImage } from '../../utils/devotionalCardGenerator';
 
 export const DailyDevotionalTab = () => {
   const [devotional, setDevotional] = useState<DailyDevotional | null>(null);
   const [activeSlot, setActiveSlot] = useState<'morning' | 'midday' | 'evening'>('morning');
+  const [isSharing, setIsSharing] = useState(false);
+  const [isSharedSuccess, setIsSharedSuccess] = useState(false);
+
+  const { createPost } = useSocial();
+  const { user } = useAuth();
 
   useEffect(() => {
     setDevotional(getCurrentDevotional());
@@ -23,6 +32,51 @@ export const DailyDevotionalTab = () => {
   if (!devotional) return null;
 
   const currentEntry = devotional[activeSlot];
+
+  const handlePostToFeed = async () => {
+    if (isSharing || !currentEntry) return;
+    setIsSharing(true);
+    soundEffects.playTap();
+
+    try {
+      // Generate both the Scripture Verse Card and the Study Details Card
+      const verseCardDataUrl = await generateDevotionalCardImage(currentEntry, 'verse');
+      const studyCardDataUrl = await generateDevotionalCardImage(currentEntry, 'study');
+
+      const mediaUrls = [verseCardDataUrl, studyCardDataUrl].filter(Boolean);
+
+      const content = `${currentEntry.title}
+${currentEntry.reference}
+"${currentEntry.text}"
+
+Today's Topic: ${currentEntry.topic}
+
+Key Points:
+${currentEntry.points.map((p) => `• ${p}`).join('\n')}
+
+Reminder:
+${currentEntry.reminder}
+
+Prayer Focus:
+${currentEntry.prayer}`;
+
+      const tags = ['morningmanna', 'scripture', 'dailybread', 'faith'];
+
+      await createPost(content, mediaUrls, tags, 'Aura Sanctuary');
+
+      soundEffects.playMessageSent();
+      setIsSharedSuccess(true);
+
+      setTimeout(() => {
+        setIsSharedSuccess(false);
+        window.dispatchEvent(new CustomEvent('navigate_tab', { detail: { tab: 'feed' } }));
+      }, 900);
+    } catch (err) {
+      console.error('Failed to post devotional to feed:', err);
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto w-full pb-20 animate-in fade-in duration-300">
@@ -93,6 +147,34 @@ export const DailyDevotionalTab = () => {
                 <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
               </button>
             </div>
+
+            <div className="ml-auto">
+              <button
+                type="button"
+                onClick={handlePostToFeed}
+                disabled={isSharing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50"
+                title="Post this devotional into the sanctuary news feed"
+              >
+                {isSharing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Posting...</span>
+                  </>
+                ) : isSharedSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-300">Posted!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Post to Feed</span>
+                    <span className="sm:hidden">Post</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           <blockquote className="text-xl sm:text-2xl font-serif text-slate-200 leading-relaxed italic border-l-4 border-white/10 pl-4 py-1">
@@ -143,6 +225,43 @@ export const DailyDevotionalTab = () => {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Post to Community Feed Action Bar */}
+        <div className="rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-amber-950/60 via-yellow-950/40 to-orange-950/60 border border-amber-500/30 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 text-left w-full sm:w-auto">
+            <div className="p-3 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 shrink-0">
+              <Sparkles className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-white font-bold text-base">Share Today's Devotional</h4>
+              <p className="text-xs text-amber-200/70">Publishes both scripture & study cards directly into the news feed.</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handlePostToFeed}
+            disabled={isSharing}
+            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-white font-bold text-sm shadow-xl shadow-amber-500/25 flex items-center justify-center gap-2 border border-amber-400/40 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shrink-0"
+          >
+            {isSharing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Generating Cards & Posting...</span>
+              </>
+            ) : isSharedSuccess ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                <span>Published to Feed! ✨</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                <span>Post {currentEntry.title.split(' ')[0]} Manna to Feed</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>
