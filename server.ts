@@ -531,10 +531,40 @@ async function startServer() {
     }
   });
 
+  // Helper to query all subscriptions for a user including aliases
+  const getPushSubscriptionsForUser = (userId: string): any[] => {
+    if (!userId) return [];
+    const cleanId = String(userId).trim();
+    const isTex =
+      cleanId === 'user_tex' ||
+      cleanId === 'tex' ||
+      cleanId === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' ||
+      cleanId.toLowerCase().includes('lightsouttattootex');
+
+    const isKimberly =
+      cleanId === 'user_kimberly' ||
+      cleanId === 'kimberly' ||
+      cleanId.toLowerCase().includes('savdbygrace360');
+
+    if (isTex) {
+      return authDb.prepare(
+        "SELECT * FROM push_subscriptions WHERE user_id IN ('user_tex', 'tex', 'rvnvHGDInTWcFdzy9LZpKFsabgz1') OR user_id LIKE '%lightsouttattootex%'"
+      ).all() as any[];
+    }
+
+    if (isKimberly) {
+      return authDb.prepare(
+        "SELECT * FROM push_subscriptions WHERE user_id IN ('user_kimberly', 'kimberly') OR user_id LIKE '%savdbygrace360%'"
+      ).all() as any[];
+    }
+
+    return authDb.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(cleanId) as any[];
+  };
+
   // Helper to send push to a user
   const sendPushToUser = async (userId: string, payload: any) => {
     try {
-      const subs = authDb.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(userId) as any[];
+      const subs = getPushSubscriptionsForUser(userId);
       if (!subs || subs.length === 0) {
         return;
       }
@@ -644,6 +674,9 @@ async function startServer() {
   });
 
   // --- Calls & WebRTC Signaling API ---
+  // Active background ringing interval timers
+  const activeRingTimers = new Map<string, NodeJS.Timeout>();
+
   app.post('/api/calls', (req, res) => {
     const { callerId, callerName, callerAvatar, receiverId, receiverName, receiverAvatar, isVideo, roomId } = req.body;
     if (!callerId || !receiverId || !roomId) {
@@ -661,8 +694,14 @@ async function startServer() {
       status: 'calling',
     });
 
+    // Clear any existing ring pulse for this roomId
+    if (activeRingTimers.has(roomId)) {
+      clearInterval(activeRingTimers.get(roomId)!);
+      activeRingTimers.delete(roomId);
+    }
+
     // IMMEDIATELY SEND REAL HIGH-PRIORITY PUSH TO RECEIVER'S DEVICE
-    sendPushToUser(receiverId, {
+    const pushPayload = {
       type: 'CALL_INCOMING',
       action: 'incoming_call',
       title: `📞 Incoming ${isVideo !== false ? 'Video' : 'Audio'} Call`,
@@ -673,7 +712,25 @@ async function startServer() {
       roomId,
       isVideo: isVideo !== false,
       url: `/?action=incoming_call&roomId=${encodeURIComponent(roomId)}&callerId=${encodeURIComponent(callerId)}&isVideo=${isVideo !== false}`
-    });
+    };
+    sendPushToUser(receiverId, pushPayload);
+
+    // Pulse repeating rings every 4 seconds while status is 'calling' so device continues ringing
+    let pulseCount = 0;
+    const ringTimer = setInterval(() => {
+      pulseCount++;
+      const current = db.getCallSessionByRoomId(roomId);
+      if (!current || current.status !== 'calling' || pulseCount > 7) {
+        clearInterval(ringTimer);
+        activeRingTimers.delete(roomId);
+        return;
+      }
+      sendPushToUser(receiverId, {
+        ...pushPayload,
+        ringPulse: pulseCount,
+      });
+    }, 4000);
+    activeRingTimers.set(roomId, ringTimer);
 
     res.status(201).json(session);
   });
@@ -694,6 +751,13 @@ async function startServer() {
   app.post('/api/calls/:roomId/status', (req, res) => {
     const { status } = req.body;
     if (!status) return res.status(400).json({ error: 'status is required' });
+
+    // Stop repeating ring pulse when status changes
+    if (activeRingTimers.has(req.params.roomId)) {
+      clearInterval(activeRingTimers.get(req.params.roomId)!);
+      activeRingTimers.delete(req.params.roomId);
+    }
+
     const session = db.updateCallStatus(req.params.roomId, status);
     if (!session) return res.status(404).json({ error: 'Call session not found' });
 

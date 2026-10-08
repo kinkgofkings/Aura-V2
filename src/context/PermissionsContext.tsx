@@ -133,6 +133,10 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if ('Notification' in window) {
       if (window.Notification.permission === 'granted') {
         setNotificationStatus('granted');
+        const activeUser = offlineStorage.load<any>('aura_active_user', null);
+        if (activeUser?.id) {
+          notificationService.registerPushSubscription(activeUser.id).catch(() => {});
+        }
       } else if (window.Notification.permission === 'denied') {
         setNotificationStatus('denied');
       } else {

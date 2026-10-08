@@ -285,6 +285,10 @@ export const ChatView: React.FC = () => {
     return merged;
   };
 
+  const activeRecipient = useMemo(() => {
+    return activeConversation ? getRecipient(activeConversation) : null;
+  }, [activeConversation, allUsers, user?.id]);
+
   const filteredConversations = conversations.filter((c) => {
     const q = (searchQuery || "").toLowerCase().trim();
     if (!q) return true;
@@ -659,6 +663,31 @@ export const ChatView: React.FC = () => {
                 currentMessages.map((msg) => {
                   const isMe = user?.id === msg.senderId;
 
+                  // Resolve sender avatar:
+                  // 1. If 1-on-1 direct conversation and sender is the recipient, use recipient's current avatar
+                  // 2. Otherwise look up sender in allUsers
+                  // 3. Fallback to msg.senderAvatar
+                  const isDirectOther =
+                    !activeConversation.isGroup &&
+                    activeRecipient &&
+                    (msg.senderId === activeRecipient.id ||
+                      (activeRecipient.handle &&
+                        activeRecipient.handle.toLowerCase() === (msg.senderName || '').toLowerCase()) ||
+                      (activeRecipient.name &&
+                        activeRecipient.name.toLowerCase() === (msg.senderName || '').toLowerCase()));
+
+                  const senderUser = (allUsers || []).find(
+                    (u) =>
+                      u?.id === msg.senderId ||
+                      (u?.handle && u.handle.toLowerCase() === (msg.senderName || '').toLowerCase()) ||
+                      (u?.name && u.name.toLowerCase() === (msg.senderName || '').toLowerCase())
+                  );
+
+                  const resolvedAvatar =
+                    (isDirectOther && activeRecipient?.avatarUrl)
+                      ? activeRecipient.avatarUrl
+                      : (senderUser?.avatarUrl || (senderUser as any)?.avatar || msg.senderAvatar);
+
                   return (
                     <motion.div
                       key={msg.id}
@@ -676,7 +705,7 @@ export const ChatView: React.FC = () => {
                           className="cursor-pointer hover:scale-105 transition-transform flex-shrink-0"
                           title={`View ${msg.senderName}'s profile`}
                         >
-                          <Avatar src={msg.senderAvatar} name={msg.senderName} size="sm" />
+                          <Avatar src={resolvedAvatar} name={msg.senderName} size="sm" />
                         </div>
                       )}
 

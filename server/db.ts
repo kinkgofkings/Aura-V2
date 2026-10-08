@@ -385,6 +385,22 @@ class JSONDatabase {
                 }
               });
             }
+
+            // Also synchronize existing chat messages authored by Tex
+            if (parsed.messages && typeof parsed.messages === 'object') {
+              Object.keys(parsed.messages).forEach((cId) => {
+                const msgs = parsed.messages[cId];
+                if (Array.isArray(msgs)) {
+                  msgs.forEach((m: any) => {
+                    if (isTexMatch({ id: m.senderId, handle: m.senderName, email: '' })) {
+                      m.senderId = targetTexId;
+                      m.senderName = 'Tex';
+                      if (realAvatar) m.senderAvatar = realAvatar;
+                    }
+                  });
+                }
+              });
+            }
           }
 
           // Ensure SEED_USERS (Tex, Daphne, Kimberly, Skylor) are present without duplicating
@@ -578,14 +594,33 @@ class JSONDatabase {
     const updated = { ...this.data.users[index], ...updates };
     this.data.users[index] = updated;
 
-    // If avatar was updated, update all posts authored by this user
-    if (updates.avatarUrl) {
+    // If avatar was updated, update all posts and messages authored by this user
+    if (updates.avatarUrl || updates.name) {
       const userHandle = updated.handle.toLowerCase();
       const userId = updated.id;
+      const newAvatar = updates.avatarUrl || updated.avatarUrl;
+      const newName = updates.name || updated.name;
       this.data.posts.forEach((p) => {
         if (p.authorId === userId || (p.authorHandle && p.authorHandle.toLowerCase() === userHandle) || (userHandle === 'tex' && p.authorName === 'Tex')) {
-          p.authorAvatar = updates.avatarUrl!;
-          p.authorName = updated.name;
+          if (newAvatar) p.authorAvatar = newAvatar;
+          if (newName) p.authorName = newName;
+        }
+      });
+
+      // Synchronize past chat messages sent by this user
+      Object.keys(this.data.messages).forEach((cId) => {
+        const msgs = this.data.messages[cId];
+        if (Array.isArray(msgs)) {
+          msgs.forEach((m) => {
+            if (
+              m.senderId === userId ||
+              m.senderId === id ||
+              (userHandle === 'tex' && (m.senderName === 'Tex' || m.senderId === 'user_tex' || m.senderId === 'rvnvHGDInTWcFdzy9LZpKFsabgz1'))
+            ) {
+              if (newAvatar) m.senderAvatar = newAvatar;
+              if (newName) m.senderName = newName;
+            }
+          });
         }
       });
     }
@@ -1085,7 +1120,22 @@ class JSONDatabase {
   }
 
   public getMessages(conversationId: string): DBMessage[] {
-    return this.data.messages[conversationId] || [];
+    const list = this.data.messages[conversationId] || [];
+    return list.map((m) => {
+      const sender = this.getUserById(m.senderId);
+      if (sender && sender.avatarUrl) {
+        const isDicebear = !m.senderAvatar || m.senderAvatar.includes('dicebear') || m.senderAvatar.includes('bottts');
+        const senderHasCustom = !sender.avatarUrl.includes('dicebear') && !sender.avatarUrl.includes('bottts');
+        if (senderHasCustom || isDicebear || m.senderAvatar !== sender.avatarUrl) {
+          return {
+            ...m,
+            senderAvatar: sender.avatarUrl,
+            senderName: sender.name || m.senderName,
+          };
+        }
+      }
+      return m;
+    });
   }
 
   public sendMessage(msg: Omit<DBMessage, 'id' | 'timestamp' | 'isRead'> & { id?: string }): DBMessage {

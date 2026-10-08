@@ -1,5 +1,5 @@
 // Aura PWA Service Worker for Offline Caching and Push Notifications
-const CACHE_NAME = 'aura-pwa-v10';
+const CACHE_NAME = 'aura-pwa-v11';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -90,7 +90,8 @@ self.addEventListener('push', (event) => {
       renotify: true,
       requireInteraction: true,
       silent: false,
-      vibrate: [500, 250, 500, 250, 1000, 300, 1000, 300, 1000],
+      timestamp: Date.now(),
+      vibrate: [1000, 500, 1000, 500, 1000, 500, 1500, 500, 1500],
       actions: [
         { action: 'answer', title: '📞 Answer' },
         { action: 'decline', title: '❌ Decline' }
@@ -106,6 +107,16 @@ self.addEventListener('push', (event) => {
     if ('setAppBadge' in self.navigator) {
       self.navigator.setAppBadge().catch(() => {});
     }
+
+    // Wake up any background or open browser windows with the incoming call event
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      clientList.forEach((client) => {
+        client.postMessage({
+          type: 'PUSH_INCOMING_CALL',
+          payload: data,
+        });
+      });
+    });
 
     event.waitUntil(
       self.registration.showNotification(

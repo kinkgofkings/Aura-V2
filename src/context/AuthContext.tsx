@@ -292,6 +292,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   }, []);
 
+  // Automatically register device push subscription on server when user is active and notifications are granted
+  useEffect(() => {
+    if (user?.id && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      notificationService.registerPushSubscription(user.id).catch(() => {});
+    }
+  }, [user?.id]);
+
   const openAuthModal = () => setIsAuthModalOpen(true);
 
   const syncFirebaseUserToDb = async (firebaseUser: FirebaseUser, additionalData?: any) => {

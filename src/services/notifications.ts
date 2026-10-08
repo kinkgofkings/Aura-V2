@@ -210,12 +210,12 @@ class NotificationService {
       const reg = await navigator.serviceWorker.ready;
       let sub = await reg.pushManager.getSubscription();
 
-      if (!sub) {
-        const res = await fetch("/api/push/vapid-key");
-        if (!res.ok) return null;
-        const { publicKey } = await res.json();
-        if (!publicKey) return null;
+      const res = await fetch("/api/push/vapid-key");
+      if (!res.ok) return null;
+      const { publicKey } = await res.json();
+      if (!publicKey) return null;
 
+      if (!sub) {
         const convertedKey = this.urlBase64ToUint8Array(publicKey);
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
@@ -223,12 +223,14 @@ class NotificationService {
         });
       }
 
-      // Send subscription to server
-      await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, subscription: sub.toJSON() }),
-      });
+      if (sub) {
+        // Send subscription to server
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, subscription: sub.toJSON() }),
+        });
+      }
 
       return sub;
     } catch (err: any) {

@@ -119,6 +119,41 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Listen to background push incoming call broadcasts from Service Worker
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PUSH_INCOMING_CALL' && event.data?.payload) {
+        const payload = event.data.payload;
+        if (payload.roomId && (!activeCallRef.current || activeCallRef.current.status === 'idle')) {
+          fetch(`/api/calls/${encodeURIComponent(payload.roomId)}`)
+            .then((r) => r.json())
+            .then((session: CallSession) => {
+              if (session && session.status === 'calling') {
+                setIncomingCall(session);
+                soundEffects.startRingtone();
+                callKitService.showIncomingCall(session.roomId, session.callerName, session.callerAvatar, session.isVideo);
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    };
+  }, []);
+
+  // Ensure push subscription is up-to-date for calling on this device
+  useEffect(() => {
+    if (user?.id && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      notificationService.registerPushSubscription(user.id).catch(() => {});
+    }
+  }, [user?.id]);
+
   // Handle URL deep-linking from background push notifications
   useEffect(() => {
     if (typeof window === 'undefined') return;
