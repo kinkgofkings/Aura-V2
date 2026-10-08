@@ -6,7 +6,7 @@ import webpush from "web-push";
 import express from 'express';
 import path from 'path';
 import { attachRealtime, countSockets, pushToUser } from './server/realtime';
-import { getIceServers, hasTurnServer } from './server/iceServers';
+import { describeIce, hasTurnServer } from './server/iceServers';
 import { buildIncomingCallPush, callPushTopic, summarizeCallDelivery, type PushSendResult } from './server/callDelivery';
 import { db } from './server/db';
 import { createBibleRoutes } from './routes/bible';
@@ -167,7 +167,7 @@ async function startServer() {
   });
 
   app.get('/api/webrtc/ice', (_req, res) => {
-    res.json({ iceServers: getIceServers(), turnConfigured: hasTurnServer() });
+    res.json(describeIce());
   });
 
   app.get('/api/system/info', (req, res) => {
@@ -1237,7 +1237,7 @@ async function startServer() {
       console.warn('VAPID keys are loaded from data/auth.db. Persist that directory, or set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or closed-app alerts break after a restart.');
     }
     if (!hasTurnServer()) {
-      console.warn('TURN is not configured. Calls on restrictive mobile networks need TURN_URLS, TURN_USERNAME, and TURN_CREDENTIAL.');
+      console.warn('TURN is not configured. Calls on restrictive mobile networks need TURN_URLS plus TURN_USERNAME and TURN_CREDENTIAL, or TURN_SECRET.');
     }
   });
 }

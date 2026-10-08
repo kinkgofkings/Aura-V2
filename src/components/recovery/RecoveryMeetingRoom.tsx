@@ -84,14 +84,18 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
   const seenSignals = useRef<Set<string>>(new Set());
   const remoteAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const iceConfigRef = useRef<RTCConfiguration>(ICE_SERVERS);
+  const iceReadyRef = useRef<Promise<RTCConfiguration>>(Promise.resolve(ICE_SERVERS));
+  const pcInflightRef = useRef<Record<string, Promise<RTCPeerConnection>>>({});
   const guestIdRef = useRef('guest_' + Math.random().toString(36).substring(2, 8));
   const [peerStates, setPeerStates] = useState<Record<string, string>>({});
   const [hearLocked, setHearLocked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    loadIceServers().then((servers) => {
-      if (!cancelled) iceConfigRef.current = { iceServers: servers };
+    iceReadyRef.current = loadIceServers().then((servers) => {
+      const config = { iceServers: servers };
+      if (!cancelled) iceConfigRef.current = config;
+      return iceConfigRef.current;
     });
     return () => {
       cancelled = true;
@@ -270,12 +274,17 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
     }
   };
 
-  const getOrCreatePeerConnection = (peerId: string): RTCPeerConnection => {
+  const getOrCreatePeerConnection = (peerId: string): Promise<RTCPeerConnection> => {
     if (peerConnections.current[peerId]) {
-      return peerConnections.current[peerId];
+      return Promise.resolve(peerConnections.current[peerId]);
     }
+    const existing = pcInflightRef.current[peerId];
+    if (existing) return existing;
 
-    const pc = new RTCPeerConnection(iceConfigRef.current);
+    const created = (async () => {
+    const iceConfig = await iceReadyRef.current;
+    if (peerConnections.current[peerId]) return peerConnections.current[peerId];
+    const pc = new RTCPeerConnection(iceConfig);
 
     if (localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream!));
@@ -304,6 +313,10 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
 
     peerConnections.current[peerId] = pc;
     return pc;
+    })();
+
+    pcInflightRef.current[peerId] = created;
+    return created;
   };
 
   const sendSignal = (toUserId: string, type: 'offer' | 'answer' | 'candidate', payload: any) => {
@@ -327,7 +340,7 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
       pendingOffers.current[fromPeerId] = offer;
       return;
     }
-    const pc = getOrCreatePeerConnection(fromPeerId);
+    const pc = await getOrCreatePeerConnection(fromPeerId);
     if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') return;
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await pc.createAnswer();
@@ -371,7 +384,7 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
       for (const participant of participants) {
         if (cancelled) return;
         if (!shouldInitiateMeshOffer(currentUserId, participant.userId)) continue;
-        const pc = getOrCreatePeerConnection(participant.userId);
+        const pc = await getOrCreatePeerConnection(participant.userId);
         localStream.getTracks().forEach(track => {
           const already = pc.getSenders().some(sender => sender.track === track);
           if (!already) pc.addTrack(track, localStream);
