@@ -74,29 +74,33 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         {/* Brand Logo & Live Badge */}
         <div className="flex items-center gap-2.5 flex-shrink-0 relative">
-          <div 
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('open_splash_screen'));
-            }}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-500 to-amber-600 p-[1.5px] shadow-lg shadow-amber-500/30 overflow-hidden cursor-pointer group relative"
-            title="Aura Sanctuary - Lion of Judah"
-          >
-            <div className="w-full h-full rounded-[14px] bg-[#05060f]/90 backdrop-blur-md flex items-center justify-center overflow-hidden relative p-1 transition-transform group-hover:scale-105">
-              <img
-                src="/icon.png"
-                alt="Aura Logo"
-                className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]"
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = 'none';
-                }}
-              />
-            </div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('open_splash_screen'));
+              }}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-500 to-amber-600 p-[1.5px] shadow-lg shadow-amber-500/30 cursor-pointer group relative flex items-center justify-center focus:outline-none"
+              title="Aura Sanctuary - Lion of Judah"
+              aria-label="Aura Sanctuary - Lion of Judah"
+            >
+              <div className="w-full h-full rounded-[14px] bg-[#05060f]/90 backdrop-blur-md flex items-center justify-center overflow-hidden relative p-1 transition-transform group-hover:scale-105">
+                <img
+                  src="/icon.png"
+                  alt="Aura Logo"
+                  className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            </button>
 
-            {/* Instagram-style Red Notification Badge on App Icon */}
+            {/* Instagram-style Red Notification Badge on App Icon - Fully visible, unclipped, and clear */}
             {unreadCount + totalUnreadChats > 0 && (
               <span
                 id="home-icon-instagram-badge"
-                className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1 rounded-full bg-[#ef4444] text-white text-[10px] font-black flex items-center justify-center shadow-lg shadow-red-600/60 border-2 border-[#05060f] animate-in zoom-in duration-200"
+                className="absolute -top-1.5 -right-1.5 min-w-[21px] h-[21px] px-1.5 rounded-full bg-[#ef4444] text-white text-[10px] font-black leading-none flex items-center justify-center text-center shadow-lg shadow-red-600/70 border-2 border-[#05060f] pointer-events-none select-none z-30 animate-in zoom-in duration-200"
                 title={`${unreadCount + totalUnreadChats} unread notifications`}
               >
                 {unreadCount + totalUnreadChats > 99 ? '99+' : unreadCount + totalUnreadChats}
@@ -152,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <MessageSquare className="w-4 h-4" />
             <span>Chats</span>
             {totalUnreadChats > 0 && (
-              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#ef4444] text-white text-[9px] font-black flex items-center justify-center shadow-md shadow-red-600/50 border border-[#05060f]">
+              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#ef4444] text-white text-[10px] font-black leading-none flex items-center justify-center text-center shadow-md shadow-red-600/50 border border-[#05060f]">
                 {totalUnreadChats > 99 ? '99+' : totalUnreadChats}
               </span>
             )}
@@ -198,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 rounded-full bg-[#ef4444] text-white text-[10px] font-black flex items-center justify-center shadow-lg shadow-red-600/50 border-2 border-[#05060f] animate-pulse">
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-[#ef4444] text-white text-[10px] font-black leading-none flex items-center justify-center text-center shadow-lg shadow-red-600/60 border-2 border-[#05060f] pointer-events-none select-none animate-pulse">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}

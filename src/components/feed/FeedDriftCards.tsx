@@ -9,7 +9,7 @@ import { soundEffects } from '../../services/audio';
 import { Avatar } from '../common/Avatar';
 import { AsyncMedia } from '../common/AsyncMedia';
 import { UserProfile } from '../../types';
-import { getSermonCoverImage } from '../../utils/sermonCovers';
+import { getSermonCoverImage, getFallbackSpiritualCover } from '../../utils/sermonCovers';
 
 // ==========================================
 // 1. PRAYER WALL DRIFT CARD
@@ -475,7 +475,14 @@ export const SermonDriftCard: React.FC<{ index?: number }> = ({ index = 0 }) => 
         <img
           src={coverUrl}
           alt={sermon.title}
+          referrerPolicy="no-referrer"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-80"
+          onError={(e) => {
+            const fallback = getFallbackSpiritualCover(sermon, index);
+            if (e.currentTarget.src !== fallback) {
+              e.currentTarget.src = fallback;
+            }
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
         

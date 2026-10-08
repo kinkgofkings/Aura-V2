@@ -117,7 +117,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           <div className="relative">
             <MessageSquare className={`w-5 h-5 ${activeTab === 'chat' ? 'stroke-[2.5px]' : ''}`} />
             {totalUnreadChats > 0 && (
-              <span className="min-w-[17px] h-[17px] px-1 rounded-full bg-[#ef4444] text-white text-[9px] font-black flex items-center justify-center absolute -top-1.5 -right-2.5 shadow-md shadow-red-600/60 border border-[#070919] animate-pulse">
+              <span className="min-w-[19px] h-[19px] px-1 rounded-full bg-[#ef4444] text-white text-[10px] font-black leading-none flex items-center justify-center text-center absolute -top-1.5 -right-2.5 shadow-md shadow-red-600/60 border border-[#070919] animate-pulse">
                 {totalUnreadChats > 99 ? '99+' : totalUnreadChats}
               </span>
             )}

@@ -15,6 +15,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import { synthesizeBibleAudio } from './server/audioService';
 import { startYoutubeFolderWatcher, syncYoutubeSermons } from './services/youtubeSyncService';
+import { startLighthouseDailyScheduler, syncLighthouseSermons } from './services/lighthouseSyncService';
 
 async function startServer() {
   const app = express();
@@ -1008,6 +1009,19 @@ async function startServer() {
 
     // Start background watcher & instant scanner for YouTube series videos
     startYoutubeFolderWatcher(bibleDB);
+
+    // Start 3x daily automated scheduler for Lighthouse Baptist Church (@lighthousewinc)
+    startLighthouseDailyScheduler(bibleDB);
+
+    // On-demand route to trigger an instant sweep for Lighthouse Baptist Church
+    app.post('/api/bible/sync/lighthouse', async (_req, res) => {
+      try {
+        const result = await syncLighthouseSermons(bibleDB);
+        res.json({ success: true, ...result });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to sync Lighthouse sermons' });
+      }
+    });
 
     // Live Sync for Contemporary & Community Ministries (Lighthouse Baptist Church, etc.)
     app.get('/api/bible/community/sermons', async (_req, res) => {

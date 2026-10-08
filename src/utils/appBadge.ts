@@ -98,11 +98,11 @@ function updateFaviconBadge(count: number): void {
 
     // White bold text
     ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${count > 9 ? '20px' : '22px'} -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.font = `bold ${count > 99 ? '15px' : count > 9 ? '18px' : '22px'} -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const text = count > 99 ? '99+' : count.toString();
-    ctx.fillText(text, badgeX, badgeY + 1);
+    ctx.fillText(text, badgeX, badgeY);
 
     favicon.href = canvas.toDataURL('image/png');
   };

@@ -20,9 +20,10 @@ import { X,
   Film,
   Layers,
   ChevronRight,
-  Share2
+  Share2,
+  RotateCcw
 } from "lucide-react";
-import { getSermonCoverImage } from "../../utils/sermonCovers";
+import { getSermonCoverImage, getFallbackSpiritualCover } from "../../utils/sermonCovers";
 import { soundEffects } from "../../services/audio";
 
 export interface SermonItem {
@@ -73,6 +74,9 @@ export function PodcastFeed({
 
   const [activeItem, setActiveItem] = useState<SermonItem | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<SermonItem | null>(null);
+  const [isPlayingModalVideo, setIsPlayingModalVideo] = useState(false);
+  const [syncingLbc, setSyncingLbc] = useState(false);
+  const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
   const [activePlayingVideo, setActivePlayingVideo] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -209,7 +213,9 @@ export function PodcastFeed({
       if (resStudio.ok && cType.includes("application/json")) {
         const studioData = await resStudio.json();
         const normalizedStudio = (Array.isArray(studioData) ? studioData : []).map((item: any) => {
-          const isVideo = item.mediaType === "video" || (!!item.mediaUrl && !item.mediaUrl.match(/\.(mp3|m4a|wav)$/i));
+          const ytMatch = (item.mediaUrl || "").match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+          const youtubeId = item.youtubeId || (ytMatch ? ytMatch[1] : (item.id && item.id.startsWith("yt-") ? item.id.replace("yt-", "") : undefined));
+          const isVideo = item.mediaType === "video" || Boolean(youtubeId) || (!!item.mediaUrl && !item.mediaUrl.match(/\.(mp3|m4a|wav)$/i));
           return {
             id: item.id,
             title: item.title,
@@ -220,10 +226,11 @@ export function PodcastFeed({
             scriptureRef: item.scriptureRef,
             summary: item.description,
             format: (isVideo ? "video" : "audio") as "video" | "audio",
+            youtubeId,
             mediaUrl: item.mediaUrl,
             mp3Url: isVideo ? undefined : item.mediaUrl,
-            mp4Url: isVideo ? item.mediaUrl : undefined,
-            thumbnailUrl: item.thumbnailUrl,
+            mp4Url: isVideo && !youtubeId ? item.mediaUrl : undefined,
+            thumbnailUrl: item.thumbnailUrl || (youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : undefined),
             duration: item.duration ? `${Math.floor(item.duration / 60)}:${String(item.duration % 60).padStart(2, '0')}` : undefined,
             date: item.dateRecorded || item.createdAt,
             source: "community" as const,
@@ -245,8 +252,42 @@ export function PodcastFeed({
       }
     } catch {}
 
-    setSermons(combined);
+    // Deduplicate all combined sermons by normalized ID / YouTube ID
+    const seen = new Set<string>();
+    const deduplicated: SermonItem[] = [];
+    for (const item of combined) {
+      const key = item.youtubeId ? `yt-${item.youtubeId}` : item.id;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduplicated.push(item);
+      }
+    }
+
+    setSermons(deduplicated);
     setLoading(false);
+  };
+
+  const handleSyncLbc = async () => {
+    setSyncingLbc(true);
+    setSyncSuccessMsg(null);
+    try {
+      soundEffects.playTap();
+      const res = await fetch('/api/bible/sync/lighthouse', { method: 'POST' });
+      const data = await res.json();
+      await fetchAllSermons();
+      setSyncSuccessMsg(`Synced! Total church archive: ${data.totalNow || 84} sermons.`);
+      setTimeout(() => setSyncSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error('Error syncing Lighthouse sermons:', err);
+    } finally {
+      setSyncingLbc(false);
+    }
+  };
+
+  const handleOpenVideoModal = (sermon: SermonItem) => {
+    soundEffects.playTap();
+    setSelectedVideo(sermon);
+    setIsPlayingModalVideo(false);
   };
 
   useEffect(() => {
@@ -286,7 +327,15 @@ export function PodcastFeed({
         if (s.channel && s.channel.trim()) set.add(s.channel.trim());
         else if (s.speaker && s.speaker.trim()) set.add(s.speaker.trim());
       });
-    return Array.from(set).sort();
+    const list = Array.from(set);
+    list.sort((a, b) => {
+      if (a.toLowerCase().includes("lighthouse")) return -1;
+      if (b.toLowerCase().includes("lighthouse")) return 1;
+      if (a.toLowerCase().includes("reformers") || a.toLowerCase().includes("ru recovery")) return -1;
+      if (b.toLowerCase().includes("reformers") || b.toLowerCase().includes("ru recovery")) return 1;
+      return a.localeCompare(b);
+    });
+    return list;
   }, [sermons, formatFilter]);
 
   const availableSeries = useMemo(() => {
@@ -312,7 +361,7 @@ export function PodcastFeed({
       return false;
     }
 
-    // Channel filter (with support for RU Recovery & Reformers Unanimous matching)
+    // Channel filter (with support for Lighthouse Baptist Church and RU Recovery)
     if (selectedChannel !== "all") {
       const qCh = selectedChannel.toLowerCase();
       const itemCh = (item.channel || "").toLowerCase();
@@ -320,8 +369,11 @@ export function PodcastFeed({
       const isRuMatch = 
         (qCh.includes("ru recovery") || qCh.includes("reformers")) && 
         (itemCh.includes("ru recovery") || itemCh.includes("reformers") || itemSpk.includes("reformers"));
+      const isLbcMatch =
+        (qCh.includes("lighthouse") || qCh.includes("shope")) &&
+        (itemCh.includes("lighthouse") || itemSpk.includes("shope") || itemSpk.includes("lighthouse"));
 
-      const matchCh = isRuMatch || itemCh === qCh || itemCh.includes(qCh) || itemSpk.includes(qCh);
+      const matchCh = isRuMatch || isLbcMatch || itemCh === qCh || itemCh.includes(qCh) || itemSpk.includes(qCh);
       if (!matchCh) return false;
     }
 
@@ -528,6 +580,23 @@ export function PodcastFeed({
                 {ch}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={handleSyncLbc}
+              disabled={syncingLbc}
+              className="ml-auto px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 flex-shrink-0 disabled:opacity-50"
+              title="Sweep YouTube for all Lighthouse Baptist Church sermons (@lighthousewinc)"
+            >
+              <RotateCcw className={`w-3 h-3 ${syncingLbc ? 'animate-spin' : ''}`} />
+              <span>{syncingLbc ? 'Sweeping LBC Channel...' : 'Sync LBC Sermons'}</span>
+            </button>
+          </div>
+        )}
+
+        {syncSuccessMsg && (
+          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>{syncSuccessMsg}</span>
           </div>
         )}
 
@@ -596,7 +665,7 @@ export function PodcastFeed({
               <div
                 key={item.id}
                 onClick={() => {
-                  if (item.format === "video") setSelectedVideo(item);
+                  if (item.format === "video") handleOpenVideoModal(item);
                   else handlePlayAudio(item);
                 }}
                 className="cursor-pointer bg-black/50 hover:bg-yellow-950/50 border border-white/10 hover:border-yellow-500/40 rounded-2xl p-3 transition-all flex items-center gap-3 group"
@@ -640,7 +709,7 @@ export function PodcastFeed({
                 <div
                   key={sermon.id}
                   id={`sermon-card-${sermon.id}`}
-                  onClick={() => setSelectedVideo(sermon)}
+                  onClick={() => handleOpenVideoModal(sermon)}
                   className={`cursor-pointer bg-slate-900/70 backdrop-blur-md border rounded-3xl overflow-hidden shadow-xl transition-all duration-500 flex flex-col justify-between group relative ${
                     isTargeted
                       ? "ring-2 ring-amber-400 border-amber-400 shadow-[0_0_35px_rgba(59,130,246,0.45)] scale-[1.01]"
@@ -660,7 +729,16 @@ export function PodcastFeed({
                       <img
                         src={cover}
                         alt={sermon.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-75"
+                        loading="eager"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-90"
+                        onError={(e) => {
+                          const fallback = getFallbackSpiritualCover(sermon, idx);
+                          if (e.currentTarget.src !== fallback) {
+                            e.currentTarget.src = fallback;
+                          }
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#0a0d14] via-black/20 to-transparent" />
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -790,8 +868,16 @@ export function PodcastFeed({
                     <img
                       src={cover}
                       alt={sermon.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="eager"
+                      decoding="async"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-90"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const fallback = getFallbackSpiritualCover(sermon, idx);
+                        if (e.currentTarget.src !== fallback) {
+                          e.currentTarget.src = fallback;
+                        }
+                      }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 
@@ -945,7 +1031,7 @@ export function PodcastFeed({
       {selectedVideo && (
         <div 
           className="fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-6"
-          onClick={() => setSelectedVideo(null)}
+          onClick={() => { setSelectedVideo(null); setIsPlayingModalVideo(false); }}
         >
           <div 
             className="bg-[#0b0f19] border border-white/20 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl space-y-3 p-4 relative"
@@ -954,12 +1040,22 @@ export function PodcastFeed({
             {/* Header */}
             <div className="flex items-start justify-between gap-3 px-1">
               <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-600 text-white">
+                    {selectedVideo.channel || 'Expository Sermon'}
+                  </span>
+                  {selectedVideo.series && (
+                    <span className="text-[10px] font-bold text-yellow-300 bg-yellow-500/15 border border-yellow-500/20 px-2 py-0.5 rounded-md truncate max-w-[200px]">
+                      {selectedVideo.series} {selectedVideo.seriesPart ? `Pt. ${selectedVideo.seriesPart}` : ''}
+                    </span>
+                  )}
+                </div>
                 <h2 className="text-white font-black text-sm sm:text-base leading-snug line-clamp-1">{selectedVideo.title}</h2>
                 <p className="text-xs text-amber-400 font-semibold">{selectedVideo.speaker} {selectedVideo.scriptureRef ? `• ${selectedVideo.scriptureRef}` : ""}</p>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedVideo(null)}
+                onClick={() => { setSelectedVideo(null); setIsPlayingModalVideo(false); }}
                 className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors flex-shrink-0"
               >
                 <X className="w-5 h-5" />
@@ -968,40 +1064,129 @@ export function PodcastFeed({
 
             {/* Video Container */}
             <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-inner">
-              {selectedVideo.youtubeId ? (
-                <iframe
-                  src={`https://www.youtube.com/embed/${selectedVideo.youtubeId}?autoplay=1&playsinline=1&rel=0`}
-                  title={selectedVideo.title}
-                  className="w-full h-full border-0"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              ) : selectedVideo.mediaUrl ? (
-                <video controls autoPlay playsInline className="w-full h-full object-contain">
-                  <source src={selectedVideo.mediaUrl} type="video/mp4" />
-                </video>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2">
-                  <Video className="w-8 h-8 text-slate-600" />
-                  <p className="text-xs">No video stream available</p>
-                </div>
-              )}
+              {(() => {
+                const effectiveYtId =
+                  selectedVideo.youtubeId ||
+                  (selectedVideo.mediaUrl || '').match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1];
+
+                const coverUrl = getSermonCoverImage(selectedVideo);
+
+                // 1. Loaded & waiting state: Display real sermon video cover artwork with Play prompt
+                if (!isPlayingModalVideo) {
+                  return (
+                    <div
+                      className="relative w-full h-full cursor-pointer group select-none overflow-hidden"
+                      onClick={() => setIsPlayingModalVideo(true)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setIsPlayingModalVideo(true);
+                        }
+                      }}
+                    >
+                      <img
+                        src={coverUrl}
+                        alt={selectedVideo.title}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-90"
+                        onError={(e) => {
+                          const fallback = getFallbackSpiritualCover(selectedVideo);
+                          if (e.currentTarget.src !== fallback) {
+                            e.currentTarget.src = fallback;
+                          }
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/25 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setIsPlayingModalVideo(true)}
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-amber-600 hover:bg-amber-500 text-white flex items-center justify-center shadow-2xl shadow-amber-600/60 group-hover:scale-110 transition-all border border-amber-400/50"
+                          >
+                            <Play className="w-8 h-8 sm:w-10 sm:h-10 fill-white translate-x-0.5" />
+                          </button>
+                          <div className="px-3.5 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-xs font-bold text-white shadow-xl flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>Loaded & Ready • Tap to Play</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-xs text-white">
+                        <span className="bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 font-bold text-amber-300">
+                          {selectedVideo.channel || 'Sermon Broadcast'}
+                        </span>
+                        {selectedVideo.duration && (
+                          <span className="bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 font-semibold text-slate-300">
+                            {selectedVideo.duration}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // 2. Active playing state
+                if (effectiveYtId) {
+                  return (
+                    <iframe
+                      src={`https://www.youtube.com/embed/${effectiveYtId}?autoplay=1&playsinline=1&rel=0`}
+                      title={selectedVideo.title}
+                      className="w-full h-full border-0"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  );
+                }
+                if (selectedVideo.mediaUrl) {
+                  return (
+                    <video controls autoPlay playsInline className="w-full h-full object-contain">
+                      <source src={selectedVideo.mediaUrl} type="video/mp4" />
+                    </video>
+                  );
+                }
+                return (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2">
+                    <Video className="w-8 h-8 text-slate-600" />
+                    <p className="text-xs">No video stream available</p>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Footer with Direct App Pop-out */}
             <div className="flex items-center justify-between px-1 pt-1">
-              <span className="text-[11px] text-slate-500">Aura Media Live</span>
-              {selectedVideo.youtubeId && (
-                <a
-                  href={`https://www.youtube.com/watch?v=${selectedVideo.youtubeId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-bold text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5"
-                >
-                  Watch on YouTube ↗
-                </a>
-              )}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-medium">Aura Sanctuary Stream</span>
+                {isPlayingModalVideo && (
+                  <button
+                    type="button"
+                    onClick={() => setIsPlayingModalVideo(false)}
+                    className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 underline"
+                  >
+                    View Cover Poster
+                  </button>
+                )}
+              </div>
+              {(() => {
+                const effectiveYtId =
+                  selectedVideo.youtubeId ||
+                  (selectedVideo.mediaUrl || '').match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1];
+                if (!effectiveYtId) return null;
+                return (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${effectiveYtId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    Watch on YouTube ↗
+                  </a>
+                );
+              })()}
             </div>
           </div>
         </div>

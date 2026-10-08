@@ -483,10 +483,10 @@ export const SERMONINDEX_CURATED_ARCHIVE: SermonIndexEntry[] = [
     duration: "38:15",
     durationSeconds: 2295,
     mediaType: "video",
-    youtubeId: "1d32g8E8hR8",
+    youtubeId: "eIGAjoqBhhU",
     mediaUrl: "",
     mp4Url: "",
-    url: "https://www.youtube.com/watch?v=v4oQ1V1_z4Y",
+    url: "https://www.youtube.com/watch?v=eIGAjoqBhhU",
     topics: [{ name: "Holiness", slug: "holiness" }, { name: "Atonement", slug: "atonement" }],
     scriptureRef: "Isaiah 6:1-8",
     thumbnailUrl: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?w=800&auto=format&fit=crop&q=80"

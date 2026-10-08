@@ -168,7 +168,8 @@ export const FALLBACK_COVERS = DIVERSE_SERMON_COVERS.map(c => c.url);
 
 /**
  * Returns a high-definition, aesthetically matched cover image for any sermon.
- * Prevents repeating the same generic headshots when media lacks its own custom art.
+ * Prioritizes the actual real YouTube video cover so users see the real video artwork,
+ * falling back to custom media art or dignified spiritual photography.
  */
 export function getSermonCoverImage(
   sermon?: {
@@ -179,11 +180,25 @@ export function getSermonCoverImage(
     topics?: { slug: string; name: string }[];
     thumbnailUrl?: string;
     speakerImage?: string;
+    youtubeId?: string;
+    mediaUrl?: string;
   },
   index = 0
 ): string {
-  // If sermon already has a valid YouTube or custom uploaded image, keep it
-  // (unless it matches the legacy repetitive headshots)
+  // 1. If sermon has a YouTube video ID (or mediaUrl containing an 11-char YouTube ID, or yt- ID prefix),
+  // return the actual real YouTube sermon video thumbnail!
+  const ytMatch = (sermon?.mediaUrl || '').match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  const ytId =
+    sermon?.youtubeId ||
+    ytMatch?.[1] ||
+    (sermon?.id && sermon.id.startsWith('yt-') ? sermon.id.replace('yt-', '') : undefined) ||
+    (sermon?.mediaUrl && sermon.mediaUrl.length === 11 ? sermon.mediaUrl : undefined);
+
+  if (ytId && ytId.length === 11 && !ytId.includes('.')) {
+    return `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`;
+  }
+
+  // 2. If sermon already has a valid custom uploaded image or non-repetitive thumbnail, use it
   if (sermon?.thumbnailUrl) {
     const isRepetitiveHeadshot = 
       sermon.thumbnailUrl.includes('photo-1472099645785-5658abf4ff4e') ||
@@ -195,6 +210,20 @@ export function getSermonCoverImage(
     }
   }
 
+  // 3. Fallback to categorized spiritual photography
+  return getFallbackSpiritualCover(sermon, index);
+}
+
+export function getFallbackSpiritualCover(
+  sermon?: {
+    id?: string;
+    title?: string;
+    series?: string;
+    channel?: string;
+    topics?: { slug: string; name: string }[];
+  },
+  index = 0
+): string {
   const textToAnalyze = `${sermon?.title || ''} ${sermon?.series || ''} ${sermon?.channel || ''} ${(sermon?.topics || []).map(t => t.name).join(' ')}`.toLowerCase();
 
   // 1. Recovery / Reformers Unanimous / 12 Steps
