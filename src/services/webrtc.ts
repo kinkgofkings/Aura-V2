@@ -8,14 +8,7 @@ export interface WebRTCConfig {
   onError?: (err: Error) => void;
 }
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun.services.mozilla.com' },
-  ],
-};
+import { iceConfiguration, loadIceServers } from './ice';
 
 export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
@@ -32,6 +25,7 @@ export class WebRTCManager {
   private pollingInterval: any = null;
   private lastSignalTimestamp: number = 0;
   private pendingCandidates: RTCIceCandidateInit[] = [];
+  private seenSignalIds = new Set<string>();
   private isMakingOffer: boolean = false;
   private isSpeakerphoneOn: boolean = true;
   private peerAnimFrameId: number | null = null;
@@ -489,6 +483,7 @@ export class WebRTCManager {
     this.currentRoomId = roomId;
     this.currentUserId = userId;
     this.pendingCandidates = [];
+    this.seenSignalIds.clear();
     this.lastSignalTimestamp = 0;
 
     // Reset previous connection if any
@@ -499,7 +494,8 @@ export class WebRTCManager {
       this.peerConnection = null;
     }
 
-    this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+    const iceServers = await loadIceServers();
+    this.peerConnection = new RTCPeerConnection(iceConfiguration(iceServers));
     this.remoteStream = new MediaStream();
 
     if (this.config.onRemoteStream) {
@@ -609,6 +605,18 @@ export class WebRTCManager {
     }
   }
 
+  public async ingestRemoteSignal(signal: { id?: string; roomId: string; senderId: string; type: string; data: any; timestamp?: number }) {
+    if (!signal) return;
+    if (signal.id) {
+      if (this.seenSignalIds.has(signal.id)) return;
+      this.seenSignalIds.add(signal.id);
+    }
+    if (signal.timestamp && signal.timestamp > this.lastSignalTimestamp) {
+      this.lastSignalTimestamp = signal.timestamp;
+    }
+    await this.handleIncomingSignal(signal);
+  }
+
   // Start low-latency polling for remote signaling packets
   private startSignalingPolling() {
     if (this.pollingInterval) clearInterval(this.pollingInterval);
@@ -627,10 +635,7 @@ export class WebRTCManager {
           const signals = await res.json();
           if (Array.isArray(signals) && signals.length > 0) {
             for (const sig of signals) {
-              if (sig.timestamp > this.lastSignalTimestamp) {
-                this.lastSignalTimestamp = sig.timestamp;
-              }
-              await this.handleIncomingSignal(sig);
+              await this.ingestRemoteSignal(sig);
             }
           }
         }

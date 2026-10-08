@@ -1,9 +1,13 @@
 import 'dotenv/config';
+import http from 'http';
 import { getLiveMinistryFeed } from "./services/youtubeFeedService";
 import { performUnifiedImageSearch } from "./services/imageSearchService";
 import webpush from "web-push";
 import express from 'express';
 import path from 'path';
+import { attachRealtime, countSockets, pushToUser } from './server/realtime';
+import { getIceServers, hasTurnServer } from './server/iceServers';
+import { buildIncomingCallPush, callPushTopic, summarizeCallDelivery, type PushSendResult } from './server/callDelivery';
 import { db } from './server/db';
 import { createBibleRoutes } from './routes/bible';
 import { BibleStudyDB } from './server/bible/models';
@@ -153,7 +157,17 @@ async function startServer() {
 
   // Health & System
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', server: 'Aura Social Express Backend', timestamp: Date.now() });
+    res.json({
+      status: 'ok',
+      server: 'Aura Social Express Backend',
+      timestamp: Date.now(),
+      realtimeClients: countSockets(),
+      turnConfigured: hasTurnServer(),
+    });
+  });
+
+  app.get('/api/webrtc/ice', (_req, res) => {
+    res.json({ iceServers: getIceServers(), turnConfigured: hasTurnServer() });
   });
 
   app.get('/api/system/info', (req, res) => {
@@ -434,6 +448,7 @@ async function startServer() {
               actionId: conversationId,
               url: `/?tab=chat&conversationId=${encodeURIComponent(conversationId)}`
             });
+            pushToUser(pId, { type: 'message:new', message });
           }
         }
       }
@@ -559,17 +574,34 @@ async function startServer() {
       ).all() as any[];
     }
 
-    return authDb.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(cleanId) as any[];
+    const ids = new Set<string>([cleanId]);
+    const social = db.getUserById(cleanId) || db.getUserByEmail(cleanId);
+    if (social) {
+      ids.add(social.id);
+      if (social.email) ids.add(social.email);
+      if (social.handle) ids.add(social.handle);
+    }
+    const idList = Array.from(ids);
+    const placeholders = idList.map(() => "?").join(", ");
+    return authDb.prepare(
+      `SELECT * FROM push_subscriptions WHERE user_id IN (${placeholders})`
+    ).all(...idList) as any[];
   };
 
   // Helper to send push to a user
-  const sendPushToUser = async (userId: string, payload: any) => {
+  const sendPushToUser = async (
+    userId: string,
+    payload: any,
+    options?: { ttl?: number; topic?: string }
+  ): Promise<PushSendResult> => {
+    const result: PushSendResult = { subscriptions: 0, delivered: 0, failed: 0, removed: 0 };
     try {
       const subs = getPushSubscriptionsForUser(userId);
+      result.subscriptions = subs?.length || 0;
       if (!subs || subs.length === 0) {
-        return;
+        return result;
       }
-      for (const sub of subs) {
+      await Promise.all(subs.map(async (sub) => {
         const pushSubscription = {
           endpoint: sub.endpoint,
           keys: {
@@ -577,18 +609,28 @@ async function startServer() {
             auth: sub.auth,
           },
         };
-        webpush.sendNotification(pushSubscription, JSON.stringify(payload), {
-          urgency: "high",
-          TTL: 86400,
-        }).catch((err: any) => {
-          if (err.statusCode === 404 || err.statusCode === 410) {
+        try {
+          await webpush.sendNotification(pushSubscription, JSON.stringify(payload), {
+            urgency: "high",
+            TTL: options?.ttl ?? 86400,
+            topic: options?.topic,
+            timeout: 8000,
+          });
+          result.delivered += 1;
+        } catch (err: any) {
+          result.failed += 1;
+          const status = err?.statusCode;
+          console.error("Push delivery failed:", status || err?.message || err, "user", userId);
+          if (status === 404 || status === 410) {
             authDb.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(sub.endpoint);
+            result.removed += 1;
           }
-        });
-      }
+        }
+      }));
     } catch (err) {
       console.error("Error dispatching push notifications:", err);
     }
+    return result;
   };
 
   // Helper to broadcast push notification to all subscribers
@@ -654,35 +696,58 @@ async function startServer() {
     const { userId, isVideo } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
 
-    // Send push notification after 3.5 seconds so user has time to switch apps or lock screen
+    const knownDevices = getPushSubscriptionsForUser(userId).length;
+    const testRoomId = 'room_test_' + Date.now();
+    const payload = buildIncomingCallPush({
+      callerId: 'system_tester',
+      callerName: 'Aura Calling Test',
+      callerAvatar: '/icons/icon-192.svg',
+      roomId: testRoomId,
+      isVideo,
+    });
+    payload.title = `Incoming ${isVideo !== false ? 'Video' : 'Audio'} Call (Test Ring)`;
+    payload.body = 'Aura Call Test is ringing your device. Tap to answer!';
+
+    // Delay so the person can leave Aura or lock the phone before the push arrives.
     setTimeout(() => {
-      const testRoomId = 'room_test_' + Date.now();
-      sendPushToUser(userId, {
-        type: 'CALL_INCOMING',
-        action: 'incoming_call',
-        title: `📞 Incoming ${isVideo ? 'Video' : 'Audio'} Call (Test Ring)`,
-        body: 'Aura Call Test is ringing your device. Tap to answer!',
-        callerId: 'system_tester',
-        callerName: 'Aura Calling Test',
-        callerAvatar: '/icons/icon-192.svg',
-        roomId: testRoomId,
-        isVideo: isVideo !== false,
-        url: `/?action=incoming_call&roomId=${encodeURIComponent(testRoomId)}&callerId=system_tester&isVideo=${isVideo !== false}`
+      sendPushToUser(userId, payload, { ttl: 60, topic: callPushTopic(testRoomId) }).catch((err) => {
+        console.error('Test call push failed:', err);
       });
     }, 3500);
 
-    res.json({ success: true, message: 'Test call will ring device in 3.5 seconds' });
+    res.json({
+      success: true,
+      subscriptions: knownDevices,
+      reachable: knownDevices > 0,
+      reason: knownDevices > 0 ? undefined : 'no_push_subscription',
+      message: knownDevices > 0
+        ? 'Test call will alert this device in 3.5 seconds'
+        : 'This phone is not registered for push. Allow notifications, then try again.',
+    });
+  });
+
+  app.get('/api/push/status', (req, res) => {
+    const userId = req.query.userId as string | undefined;
+    if (!userId) return res.status(400).json({ error: 'userId query is required' });
+    const subscriptions = getPushSubscriptionsForUser(userId).length;
+    res.json({
+      userId,
+      subscriptions,
+      realtime: countSockets(userId),
+      registered: subscriptions > 0,
+    });
   });
 
   // --- Calls & WebRTC Signaling API ---
   // Active background ringing interval timers
   const activeRingTimers = new Map<string, NodeJS.Timeout>();
 
-  app.post('/api/calls', (req, res) => {
+  app.post('/api/calls', async (req, res) => {
     const { callerId, callerName, callerAvatar, receiverId, receiverName, receiverAvatar, isVideo, roomId } = req.body;
     if (!callerId || !receiverId || !roomId) {
       return res.status(400).json({ error: 'callerId, receiverId, and roomId are required' });
     }
+    try {
     const session = db.createOrUpdateCallSession({
       callerId,
       callerName,
@@ -701,22 +766,20 @@ async function startServer() {
       activeRingTimers.delete(roomId);
     }
 
-    // IMMEDIATELY SEND REAL HIGH-PRIORITY PUSH TO RECEIVER'S DEVICE
-    const pushPayload = {
-      type: 'CALL_INCOMING',
-      action: 'incoming_call',
-      title: `📞 Incoming ${isVideo !== false ? 'Video' : 'Audio'} Call`,
-      body: `${callerName || 'Someone'} is calling you on Aura...`,
+    const pushPayload = buildIncomingCallPush({
       callerId,
       callerName,
       callerAvatar,
       roomId,
-      isVideo: isVideo !== false,
-      url: `/?action=incoming_call&roomId=${encodeURIComponent(roomId)}&callerId=${encodeURIComponent(callerId)}&isVideo=${isVideo !== false}`
-    };
-    sendPushToUser(receiverId, pushPayload);
+      isVideo,
+    });
+    const topic = callPushTopic(roomId);
+    const realtimeDelivered = pushToUser(receiverId, { type: 'call:incoming', session, payload: pushPayload });
+    const pushResult = await sendPushToUser(receiverId, pushPayload, { ttl: 60, topic });
+    const delivery = summarizeCallDelivery(pushResult, realtimeDelivered);
 
-    // Pulse repeating rings every 4 seconds while status is 'calling' so device continues ringing
+    // Repeat the alert while the call is still ringing. Same topic collapses
+    // undelivered copies so a phone that was offline does not get a stack of stale rings.
     let pulseCount = 0;
     const ringTimer = setInterval(() => {
       pulseCount++;
@@ -726,14 +789,28 @@ async function startServer() {
         activeRingTimers.delete(roomId);
         return;
       }
-      sendPushToUser(receiverId, {
-        ...pushPayload,
-        ringPulse: pulseCount,
+      const pulsePayload = buildIncomingCallPush({
+        callerId,
+        callerName,
+        callerAvatar,
+        roomId,
+        isVideo,
+        pulse: pulseCount,
+      });
+      pushToUser(receiverId, { type: 'call:incoming', session: current, payload: pulsePayload });
+      sendPushToUser(receiverId, pulsePayload, { ttl: 45, topic }).catch((err) => {
+        console.error('Call ring pulse failed:', err);
       });
     }, 4000);
     activeRingTimers.set(roomId, ringTimer);
 
-    res.status(201).json(session);
+    res.status(201).json({ ...session, delivery });
+    } catch (err) {
+      console.error('Failed to start call:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to start call' });
+      }
+    }
   });
 
   app.get('/api/calls/pending', (req, res) => {
@@ -762,6 +839,9 @@ async function startServer() {
     const session = db.updateCallStatus(req.params.roomId, status);
     if (!session) return res.status(404).json({ error: 'Call session not found' });
 
+    pushToUser(session.callerId, { type: 'call:status', session });
+    pushToUser(session.receiverId, { type: 'call:status', session });
+
     // If call completed, declined or missed, optionally log in direct conversation
     if (status === 'ended' || status === 'declined') {
       const isMissed = !session.startedAt || session.status === 'calling';
@@ -773,7 +853,7 @@ async function startServer() {
         callerName: session.callerName,
         callerAvatar: session.callerAvatar,
         isMissed: isMissed && status !== 'declined',
-      });
+      }, { ttl: 60, topic: callPushTopic(req.params.roomId) });
 
       // If receiver declined, notify caller
       if (status === 'declined') {
@@ -825,6 +905,11 @@ async function startServer() {
       return res.status(400).json({ error: 'senderId, type, and data are required' });
     }
     const signal = db.addCallSignal(req.params.roomId, senderId, type, data);
+    const session = db.getCallSessionByRoomId(req.params.roomId);
+    if (session) {
+      const targetId = session.callerId === senderId ? session.receiverId : session.callerId;
+      pushToUser(targetId, { type: 'call:signal', signal });
+    }
     res.status(201).json(signal);
   });
 
@@ -1130,8 +1215,16 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = http.createServer(app);
+  attachRealtime(server);
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`Aura Server running on http://localhost:${PORT}`);
+    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+      console.warn('VAPID keys are loaded from data/auth.db. Persist that directory, or set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or closed-app alerts break after a restart.');
+    }
+    if (!hasTurnServer()) {
+      console.warn('TURN is not configured. Calls on restrictive mobile networks need TURN_URLS, TURN_USERNAME, and TURN_CREDENTIAL.');
+    }
   });
 }
 

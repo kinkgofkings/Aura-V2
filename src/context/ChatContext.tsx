@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Conversation, ChatMessage, UserProfile, MediaType } from '../types';
 
 const INITIAL_CONVERSATIONS: Conversation[] = [];
@@ -7,6 +7,7 @@ import { offlineStorage, STORAGE_KEYS } from '../services/offlineStorage';
 import { notificationService } from '../services/notifications';
 import { soundEffects } from '../services/audio';
 import { api } from '../services/api';
+import { realtime } from '../services/realtime';
 import { useAuth } from './AuthContext';
 
 interface StoryReplyInfo {
@@ -113,6 +114,56 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [activeTypingUsers, setActiveTypingUsers] = useState<string[]>([]);
+  const userIdRef = useRef<string | undefined>(user?.id);
+  useEffect(() => {
+    userIdRef.current = user?.id;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    realtime.connect(user.id);
+    return realtime.on('message:new', (event) => {
+      const msg = event.message as ChatMessage | undefined;
+      if (!msg?.conversationId) return;
+      setMessages((prev) => {
+        const list = prev[msg.conversationId] || [];
+        if (list.some((m) => m.id === msg.id || (m.senderId === msg.senderId && m.content === msg.content && Math.abs(m.timestamp - msg.timestamp) < 3000))) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [msg.conversationId]: [...list, msg],
+        };
+      });
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === msg.conversationId
+            ? {
+                ...c,
+                lastMessage: msg,
+                updatedAt: msg.timestamp,
+                unreadCount: (c.unreadCount || 0) + (msg.senderId !== userIdRef.current ? 1 : 0),
+              }
+            : c
+        )
+      );
+      if (msg.senderId !== userIdRef.current) {
+        notificationService.notify({
+          type: 'message',
+          title: msg.senderName || 'New Chat Message',
+          body: msg.content || (msg.mediaUrl ? 'Sent an attachment' : 'New message'),
+          avatar: msg.senderAvatar,
+          playSound: true,
+          actionId: `chat_${msg.conversationId}`,
+          data: {
+            url: `/?tab=chat&conv=${msg.conversationId}`,
+            conversationId: msg.conversationId,
+          },
+        });
+        soundEffects.playMessageReceived();
+      }
+    });
+  }, [user?.id]);
 
   useEffect(() => {
     const handleOpenConv = (e: any) => {

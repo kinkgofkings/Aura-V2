@@ -418,13 +418,23 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         soundEffects.playSuccessTone();
-        notificationService.notify({
-          type: 'call',
-          title: '📞 Incoming Call Test Queued!',
-          body: 'Your device will ring in 3.5 seconds. Switch apps or lock your screen now to test!',
-          playSound: true,
-        });
+        if (data.reachable === false) {
+          notificationService.notify({
+            type: 'system',
+            title: 'This phone is not registered',
+            body: 'Allow notifications and add Aura to your home screen, then run the test again. A closed app cannot ring without that registration.',
+            playSound: false,
+          });
+        } else {
+          notificationService.notify({
+            type: 'call',
+            title: 'Incoming Call Test Queued',
+            body: 'Your device will alert in 3.5 seconds. Switch apps or lock your screen now to test.',
+            playSound: true,
+          });
+        }
       }
     } catch (err) {
       console.warn('Failed to trigger test call push:', err);

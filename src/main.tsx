@@ -29,14 +29,15 @@ if (typeof window !== "undefined") {
 
 // Handle Service Worker cleanly and ensure preview is never stuck offline
 if (typeof window !== "undefined") {
-  const isPreviewOrDev =
+  // Only skip the service worker in a local dev preview. Production hosts,
+  // including Cloud Run, must keep it registered or a closed phone cannot
+  // receive call or message alerts.
+  const isLocalPreview =
     window.self !== window.top ||
-    window.location.hostname.includes("run.app") ||
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1" ||
-    Boolean(import.meta.env.DEV);
+    ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
+      Boolean(import.meta.env.DEV));
 
-  if (isPreviewOrDev) {
+  if (isLocalPreview) {
     // In preview iframe / dev environment, unregister service workers and purge caches to prevent stale offline locks
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
@@ -54,10 +55,8 @@ if (typeof window !== "undefined") {
     }
   } else if ("serviceWorker" in navigator) {
     // Production PWA mode on custom domain
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch((err) => {
-        console.warn("Service worker registration note:", err);
-      });
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.warn("Service worker registration note:", err);
     });
   }
 }

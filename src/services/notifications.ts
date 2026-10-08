@@ -207,7 +207,12 @@ class NotificationService {
       return null;
     }
     try {
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<ServiceWorkerRegistration>((_, reject) => {
+          setTimeout(() => reject(new Error("service-worker-not-ready")), 4000);
+        }),
+      ]);
       let sub = await reg.pushManager.getSubscription();
 
       const res = await fetch("/api/push/vapid-key");

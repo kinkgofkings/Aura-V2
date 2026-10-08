@@ -28,6 +28,11 @@ COPY --from=builder /app/dist ./dist
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# Push subscriptions and VAPID keys live here. Mount a volume so a restart
+# does not mint new keys and silently stop closed-app alerts.
+RUN mkdir -p /app/data
+VOLUME ["/app/data"]
+
 # Expose the application port
 EXPOSE 3000
 

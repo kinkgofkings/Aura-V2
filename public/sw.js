@@ -104,26 +104,24 @@ self.addEventListener('push', (event) => {
       }
     };
 
-    if ('setAppBadge' in self.navigator) {
-      self.navigator.setAppBadge().catch(() => {});
-    }
+    event.waitUntil((async () => {
+      if ('setAppBadge' in self.navigator) {
+        try { await self.navigator.setAppBadge(); } catch { /* badge is optional */ }
+      }
 
-    // Wake up any background or open browser windows with the incoming call event
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       clientList.forEach((client) => {
         client.postMessage({
           type: 'PUSH_INCOMING_CALL',
           payload: data,
         });
       });
-    });
 
-    event.waitUntil(
-      self.registration.showNotification(
-        data.title || `📞 Incoming ${isVideo ? 'Video' : 'Audio'} Call`,
+      await self.registration.showNotification(
+        data.title || `Incoming ${isVideo ? 'Video' : 'Audio'} Call`,
         callOptions
-      )
-    );
+      );
+    })());
     return;
   }
 
@@ -199,9 +197,15 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
+        client.postMessage({
+          type: 'NOTIFICATION_OPEN',
+          url: targetUrl,
+          action: event.action || 'open',
+          data: event.notification.data || {},
+        });
         if ('focus' in client) {
           if ('navigate' in client) {
-            client.navigate(targetUrl);
+            client.navigate(targetUrl).catch(() => {});
           }
           return client.focus();
         }
@@ -211,4 +215,35 @@ self.addEventListener('notificationclick', (event) => {
       }
     })
   );
+});
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    const keyRes = await fetch('/api/push/vapid-key');
+    if (!keyRes.ok) return;
+    const { publicKey } = await keyRes.json();
+    if (!publicKey) return;
+    const subscription = await self.registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+    const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clientList.forEach((client) => {
+      client.postMessage({
+        type: 'PUSH_SUBSCRIPTION_CHANGED',
+        subscription: subscription.toJSON(),
+      });
+    });
+  })());
 });

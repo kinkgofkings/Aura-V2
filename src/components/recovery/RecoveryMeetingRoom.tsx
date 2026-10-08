@@ -27,6 +27,7 @@ import {
 import { RecoveryMeeting, MeetingParticipant, MeetingChatMessage, WebRTCSignalPayload } from '../../types/recovery';
 import { useAuth } from '../../context/AuthContext';
 import { soundEffects } from '../../services/audio';
+import { loadIceServers } from '../../services/ice';
 import { Avatar } from '../common/Avatar';
 
 interface RecoveryMeetingRoomProps {
@@ -35,11 +36,11 @@ interface RecoveryMeetingRoomProps {
   onMeetingStatusChange?: (status: 'scheduled' | 'live' | 'completed') => void;
 }
 
-const ICE_SERVERS = {
+const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
 };
 
 export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
@@ -76,6 +77,17 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
   // Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
+  const iceConfigRef = useRef<RTCConfiguration>(ICE_SERVERS);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadIceServers().then((servers) => {
+      if (!cancelled) iceConfigRef.current = { iceServers: servers };
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const lastSignalTimestamp = useRef<number>(0);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -237,7 +249,7 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
       return peerConnections.current[peerId];
     }
 
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+    const pc = new RTCPeerConnection(iceConfigRef.current);
 
     // Add local tracks
     if (localStream) {

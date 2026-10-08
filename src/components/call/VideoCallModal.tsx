@@ -65,6 +65,7 @@ export const VideoCallModal: React.FC = () => {
     getVideoDevices,
     simulateCompanionAnswer,
     endCall,
+    peerReachable,
   } = useCall();
 
   // View state controls
@@ -418,10 +419,15 @@ export const VideoCallModal: React.FC = () => {
                       ) : (
                         <>
                           <PhoneCall className="w-3.5 h-3.5 animate-bounce text-amber-400" />
-                          Ringing...
+                          {peerReachable === false ? 'Ringing in Aura only' : 'Ringing...'}
                         </>
                       )}
                     </p>
+                    {peerReachable === false && !isConnected && (
+                      <p className="text-[11px] text-amber-200/90 mt-2 max-w-xs">
+                        Their phone is not registered for alerts. The call rings only while Aura is open on their device.
+                      </p>
+                    )}
                   </div>
 
                   {/* Spacer to preserve bottom controls clearance */}
