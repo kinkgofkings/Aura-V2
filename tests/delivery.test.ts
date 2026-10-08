@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { buildIncomingCallPush, callPushTopic, summarizeCallDelivery } from "../server/callDelivery";
-import { getIceServers, hasTurnServer } from "../server/iceServers";
+import { createHmac } from "node:crypto";
+import { describeIce, getIceServers, hasTurnServer, mintTurnCredential } from "../server/iceServers";
 
 const unreachable = summarizeCallDelivery(
   { subscriptions: 0, delivered: 0, failed: 0, removed: 0 },
@@ -61,5 +62,32 @@ assert.equal(hasTurnServer({
 const turn = withTurn.find((server) => Array.isArray(server.urls));
 assert.ok(turn);
 assert.deepEqual(turn?.urls, ["turn:turn.example.com:3478", "turns:turn.example.com:5349"]);
+
+const secretOnly = describeIce({
+  TURN_URLS: "turn:webcraftstudio.cloud:443?transport=tcp",
+  TURN_SECRET: "test-secret",
+  TURN_TTL_SECONDS: "3600",
+});
+assert.equal(secretOnly.turnConfigured, true);
+assert.equal(hasTurnServer({ TURN_URLS: "turn:webcraftstudio.cloud:443?transport=tcp", TURN_SECRET: "test-secret" }), true);
+const minted = secretOnly.iceServers.find((server) => server.username?.includes(":"));
+assert.ok(minted?.username && minted.credential);
+const expected = createHmac("sha1", "test-secret").update(minted.username).digest("base64");
+assert.equal(minted.credential, expected);
+assert.ok((secretOnly.expiresAt || 0) > Date.now());
+
+const staticWins = describeIce({
+  TURN_URLS: "turn:webcraftstudio.cloud:443?transport=tcp",
+  TURN_USERNAME: "aura",
+  TURN_CREDENTIAL: "static-pass",
+  TURN_SECRET: "ignored-when-static-is-set",
+});
+const staticTurn = staticWins.iceServers.find((server) => server.username === "aura");
+assert.equal(staticTurn?.credential, "static-pass");
+assert.equal(staticWins.expiresAt, undefined);
+
+const roundTrip = mintTurnCredential("test-secret", 120, "caller");
+assert.ok(roundTrip.username.endsWith(":caller"));
+assert.equal(roundTrip.expiresAt > Date.now(), true);
 
 console.log("delivery and ice checks passed");

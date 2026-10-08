@@ -11,11 +11,11 @@ const FALLBACK_ICE: IceServerConfig[] = [
   { urls: "stun:stun.cloudflare.com:3478" },
 ];
 
-let cached: IceServerConfig[] | null = null;
+let cached: { servers: IceServerConfig[]; expiresAt: number } | null = null;
 let loading: Promise<IceServerConfig[]> | null = null;
 
 export async function loadIceServers(): Promise<IceServerConfig[]> {
-  if (cached) return cached;
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.servers;
   if (loading) return loading;
 
   loading = (async () => {
@@ -24,15 +24,18 @@ export async function loadIceServers(): Promise<IceServerConfig[]> {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
-          cached = data.iceServers;
-          return cached;
+          const expiresAt = typeof data.expiresAt === "number"
+            ? data.expiresAt
+            : Date.now() + 10 * 60 * 1000;
+          cached = { servers: data.iceServers, expiresAt };
+          return cached.servers;
         }
       }
     } catch {
       // Fall through to public STUN.
     }
-    cached = FALLBACK_ICE;
-    return cached;
+    cached = { servers: FALLBACK_ICE, expiresAt: Date.now() + 60 * 1000 };
+    return cached.servers;
   })();
 
   try {

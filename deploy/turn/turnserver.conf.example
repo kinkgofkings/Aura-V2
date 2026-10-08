@@ -1,0 +1,32 @@
+# Coturn on the Aura host. The Lightsail firewall only allows TCP 22, 80, and 443,
+# so nginx peeks at port 443 and sends non-TLS connections to this listener.
+# Browsers then use turn:<host>:443?transport=tcp. Copy to /etc/turnserver.conf
+# and replace the password. Do not commit a real password.
+
+listening-port=3478
+listening-ip=127.0.0.1
+relay-ip=172.26.12.55
+external-ip=54.80.229.108/172.26.12.55
+
+min-port=49152
+max-port=49251
+
+fingerprint
+lt-cred-mech
+user=aura:REPLACE_WITH_PASSWORD
+realm=webcraftstudio.cloud
+
+no-multicast-peers
+no-cli
+no-tls
+no-dtls
+no-udp
+no-tcp-relay
+
+max-bps=4000000
+user-quota=8
+total-quota=100
+
+log-file=/var/log/turnserver/turn.log
+simple-log
+pidfile=/run/turnserver/turnserver.pid
