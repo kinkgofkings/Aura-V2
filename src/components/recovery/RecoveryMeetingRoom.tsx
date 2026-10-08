@@ -28,6 +28,8 @@ import { RecoveryMeeting, MeetingParticipant, MeetingChatMessage, WebRTCSignalPa
 import { useAuth } from '../../context/AuthContext';
 import { soundEffects } from '../../services/audio';
 import { loadIceServers } from '../../services/ice';
+import { meetingSignalKey, shouldInitiateMeshOffer } from '../../services/meetingMesh';
+import { realtime } from '../../services/realtime';
 import { Avatar } from '../common/Avatar';
 
 interface RecoveryMeetingRoomProps {
@@ -77,7 +79,14 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
   // Refs
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
+  const pendingCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
+  const pendingOffers = useRef<Record<string, RTCSessionDescriptionInit>>({});
+  const seenSignals = useRef<Set<string>>(new Set());
+  const remoteAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const iceConfigRef = useRef<RTCConfiguration>(ICE_SERVERS);
+  const guestIdRef = useRef('guest_' + Math.random().toString(36).substring(2, 8));
+  const [peerStates, setPeerStates] = useState<Record<string, string>>({});
+  const [hearLocked, setHearLocked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +101,7 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   // Identity resolution
-  const currentUserId = user?.id || 'guest_' + Math.random().toString(36).substring(2, 8);
+  const currentUserId = user?.id || guestIdRef.current;
   const isHost =
     user?.id === meeting.hostId ||
     user?.handle?.toLowerCase() === 'tex' ||
@@ -225,6 +234,9 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
   // Handle Incoming WebRTC Signals
   const handleIncomingSignals = async (signals: WebRTCSignalPayload[]) => {
     for (const sig of signals) {
+      const key = meetingSignalKey(sig);
+      if (seenSignals.current.has(key)) continue;
+      seenSignals.current.add(key);
       if (sig.type === 'host_command') {
         if (sig.payload.command === 'mute_all' && !isHost) {
           muteLocalAudio();
@@ -244,6 +256,20 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
     }
   };
 
+  const flushCandidates = async (peerId: string) => {
+    const queued = pendingCandidates.current[peerId] || [];
+    pendingCandidates.current[peerId] = [];
+    const pc = peerConnections.current[peerId];
+    if (!pc || !pc.remoteDescription) return;
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn('Error adding queued ICE candidate:', e);
+      }
+    }
+  };
+
   const getOrCreatePeerConnection = (peerId: string): RTCPeerConnection => {
     if (peerConnections.current[peerId]) {
       return peerConnections.current[peerId];
@@ -251,23 +277,29 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
 
     const pc = new RTCPeerConnection(iceConfigRef.current);
 
-    // Add local tracks
     if (localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream!));
     }
 
-    // Handle remote tracks
     pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        setRemoteStreams(prev => ({ ...prev, [peerId]: event.streams[0] }));
+      const stream = event.streams?.[0];
+      if (!stream) return;
+      setRemoteStreams(prev => ({ ...prev, [peerId]: stream }));
+      const audio = remoteAudioRefs.current[peerId];
+      if (audio) {
+        audio.srcObject = stream;
+        audio.play().catch(() => setHearLocked(true));
       }
     };
 
-    // Send ICE candidates to peer
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         sendSignal(peerId, 'candidate', event.candidate);
       }
+    };
+
+    pc.onconnectionstatechange = () => {
+      setPeerStates(prev => ({ ...prev, [peerId]: pc.connectionState }));
     };
 
     peerConnections.current[peerId] = pc;
@@ -291,30 +323,90 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
   };
 
   const handleReceiveOffer = async (fromPeerId: string, offer: RTCSessionDescriptionInit) => {
+    if (!localStream) {
+      pendingOffers.current[fromPeerId] = offer;
+      return;
+    }
     const pc = getOrCreatePeerConnection(fromPeerId);
+    if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') return;
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     sendSignal(fromPeerId, 'answer', answer);
+    await flushCandidates(fromPeerId);
   };
 
   const handleReceiveAnswer = async (fromPeerId: string, answer: RTCSessionDescriptionInit) => {
     const pc = peerConnections.current[fromPeerId];
-    if (pc) {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    }
+    if (!pc || pc.signalingState !== 'have-local-offer') return;
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    await flushCandidates(fromPeerId);
   };
 
   const handleReceiveCandidate = async (fromPeerId: string, candidate: RTCIceCandidateInit) => {
     const pc = peerConnections.current[fromPeerId];
-    if (pc) {
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (e) {
-        console.warn('Error adding ICE candidate:', e);
-      }
+    if (!pc || !pc.remoteDescription) {
+      pendingCandidates.current[fromPeerId] = pendingCandidates.current[fromPeerId] || [];
+      pendingCandidates.current[fromPeerId].push(candidate);
+      return;
+    }
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+      console.warn('Error adding ICE candidate:', e);
     }
   };
+
+  // The person with the lower id places the call. The other person answers.
+  useEffect(() => {
+    if (!localStream) return;
+    let cancelled = false;
+
+    const connectRoom = async () => {
+      const queuedOffers = { ...pendingOffers.current };
+      pendingOffers.current = {};
+      for (const [peerId, offer] of Object.entries(queuedOffers)) {
+        await handleReceiveOffer(peerId, offer);
+      }
+      for (const participant of participants) {
+        if (cancelled) return;
+        if (!shouldInitiateMeshOffer(currentUserId, participant.userId)) continue;
+        const pc = getOrCreatePeerConnection(participant.userId);
+        localStream.getTracks().forEach(track => {
+          const already = pc.getSenders().some(sender => sender.track === track);
+          if (!already) pc.addTrack(track, localStream);
+        });
+        if (pc.signalingState === 'stable' && !pc.currentLocalDescription) {
+          try {
+            const offer = await pc.createOffer();
+            if (cancelled) return;
+            await pc.setLocalDescription(offer);
+            sendSignal(participant.userId, 'offer', pc.localDescription);
+          } catch (err) {
+            console.warn('Could not start room call:', err);
+          }
+        }
+      }
+    };
+
+    connectRoom();
+    return () => {
+      cancelled = true;
+    };
+  }, [participants, localStream, currentUserId]);
+
+  useEffect(() => {
+    realtime.connect(currentUserId);
+    return realtime.on('meeting:signal', (event) => {
+      if (event?.meetingId !== meeting.id || !event.signal) return;
+      const signal = event.signal as WebRTCSignalPayload;
+      if (signal.toUserId && signal.toUserId !== currentUserId) return;
+      if (signal.timestamp > lastSignalTimestamp.current) {
+        lastSignalTimestamp.current = signal.timestamp;
+      }
+      handleIncomingSignals([signal]);
+    });
+  }, [meeting.id, currentUserId, localStream]);
 
   // Toggle Mic
   const toggleMute = () => {
@@ -606,6 +698,26 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
         </div>
       </header>
 
+      {hearLocked && (
+        <button
+          type="button"
+          onClick={() => {
+            Object.values(remoteAudioRefs.current).forEach(audio => {
+              audio?.play().catch(() => {});
+            });
+            setHearLocked(false);
+          }}
+          className="mx-3 mt-3 px-4 py-3 rounded-2xl bg-amber-500 text-black text-sm font-bold"
+        >
+          Tap to hear the room
+        </button>
+      )}
+      {otherParticipants.length === 0 && (
+        <p className="mx-3 mt-3 text-xs text-slate-300">
+          You are in the room. When someone else joins, the call connects and you can hear each other.
+        </p>
+      )}
+
       {/* Main Video & Chat Workspace */}
       <div className="flex-1 min-h-0 flex overflow-hidden relative">
         {/* Left: Video Tiles Grid */}
@@ -683,15 +795,30 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
             {/* Remote Participants Tiles */}
             {otherParticipants.map(participant => {
               const stream = remoteStreams[participant.userId];
+              const linkState = peerStates[participant.userId];
+              const showVideo = Boolean(stream && !participant.isVideoOff && !participant.isAudioOnly);
               return (
                 <div
                   key={participant.userId}
                   className="relative aspect-video rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-white/15 overflow-hidden shadow-2xl flex items-center justify-center group"
                 >
-                  {stream && !participant.isVideoOff && !participant.isAudioOnly ? (
+                  {stream && (
+                    <audio
+                      autoPlay
+                      ref={el => {
+                        remoteAudioRefs.current[participant.userId] = el;
+                        if (el && el.srcObject !== stream) {
+                          el.srcObject = stream;
+                          el.play().catch(() => setHearLocked(true));
+                        }
+                      }}
+                    />
+                  )}
+                  {showVideo ? (
                     <video
                       autoPlay
                       playsInline
+                      muted
                       ref={el => {
                         if (el && el.srcObject !== stream) {
                           el.srcObject = stream;
@@ -713,7 +840,9 @@ export const RecoveryMeetingRoom: React.FC<RecoveryMeetingRoomProps> = ({
                         )}
                       </div>
                       <span className="text-sm font-bold text-white mb-0.5">{participant.userName}</span>
-                      <span className="text-[11px] text-slate-400">Fellow Overcomer</span>
+                      <span className="text-[11px] text-slate-400">
+                        {linkState === 'connected' ? 'Live audio' : linkState === 'failed' ? 'Could not connect audio' : 'Connecting audio'}
+                      </span>
                     </div>
                   )}
 

@@ -236,15 +236,29 @@ async function startServer() {
     res.json(safeUser);
   });
 
+  const saveUserProfile = (id: string, body: Record<string, unknown>) => {
+    const { passwordHash: _passwordHash, id: _id, ...updates } = body || {};
+    let updated = db.updateUser(id, updates);
+    if (!updated && typeof updates.email === 'string') {
+      const byEmail = db.getUserByEmail(updates.email);
+      if (byEmail) updated = db.updateUser(byEmail.id, updates);
+    }
+    if (!updated && typeof updates.handle === 'string') {
+      const byHandle = db.getUserByHandle(updates.handle);
+      if (byHandle) updated = db.updateUser(byHandle.id, updates);
+    }
+    return updated;
+  };
+
   app.put('/api/users/:id', (req, res) => {
-    const updated = db.updateUser(req.params.id, req.body);
+    const updated = saveUserProfile(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     const { passwordHash, ...safeUser } = updated;
     res.json(safeUser);
   });
 
   app.patch('/api/users/:id', (req, res) => {
-    const updated = db.updateUser(req.params.id, req.body);
+    const updated = saveUserProfile(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     const { passwordHash, ...safeUser } = updated;
     res.json(safeUser);

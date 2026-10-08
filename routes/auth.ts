@@ -142,26 +142,24 @@ export function createAuthRoutes(authService: AuthService): Router {
             googleId,
           });
         }
-      } else {
-        // Update user with latest Google info
+      } else if (socialUser) {
+        // Keep the saved name, photo, and bio. Signing in again must not rebuild the profile.
         socialUser = db.updateUser(socialUser.id, {
-          name: isTexAdmin ? 'Tex' : (displayName || socialUser.name),
-          avatarUrl: avatarUrl || socialUser.avatarUrl,
-          authProvider: 'google',
+          authProvider: socialUser.authProvider || 'google',
           googleId: googleId || socialUser.googleId,
-        });
+        }) || socialUser;
       }
 
       let token = '';
       try {
-        const jwt = await import('jsonwebtoken');
-        token = jwt.default.sign(
-          { userId: socialUser.id, email: socialUser.email },
-          process.env.JWT_SECRET || 'aura_super_secure_secret_jwt_key_2026',
-          { expiresIn: '30d' }
+        const session = await authService.ensureAccount(
+          cleanEmail,
+          socialUser.handle || handle,
+          socialUser.name
         );
-      } catch (jwtErr) {
-        console.warn('JWT sign notice:', jwtErr);
+        token = session.token;
+      } catch (sessionErr) {
+        console.warn('Google session notice:', sessionErr);
       }
 
       res.json({
@@ -259,16 +257,80 @@ export function createAuthRoutes(authService: AuthService): Router {
 
     try {
       const decoded = authService.verifyToken(token);
-      const user = authService.getUserById(decoded.userId);
+      const user = decoded.userId ? authService.getUserById(decoded.userId) : null;
 
-      if (!user) {
+      const email = user?.email || decoded.email;
+      let socialUser = email ? db.getUserByEmail(email) : undefined;
+      if (!socialUser && user?.username && db.getUserByHandle) {
+        socialUser = db.getUserByHandle(user.username);
+      }
+      if (!socialUser && decoded.userId) {
+        socialUser = db.getUserById(decoded.userId);
+      }
+
+      if (!user && !socialUser) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      const socialUser = db.getUserByEmail(user.email);
       res.json({ user, socialUser });
     } catch (error: any) {
       res.status(401).json({ error: error.message });
+    }
+  });
+
+  // POST /api/auth/forgot-password
+  router.post('/forgot-password', async (req: Request, res: Response) => {
+    const raw = String(req.body.email || req.body.emailOrUsername || '').trim().toLowerCase();
+    if (!raw) return res.status(400).json({ error: 'Email is required' });
+
+    const social = raw.includes('@')
+      ? db.getUserByEmail(raw)
+      : (db.getUserByHandle ? db.getUserByHandle(raw) : undefined);
+    const email = (social?.email || raw).trim().toLowerCase();
+
+    try {
+      await authService.forgotPassword(email);
+    } catch {
+      // Same response whether or not the account exists.
+    }
+
+    res.json({
+      message: 'If that account exists, enter the reset code with a new password.',
+      delivered: false,
+    });
+  });
+
+  // POST /api/auth/reset-password
+  router.post('/reset-password', async (req: Request, res: Response) => {
+    const { resetToken, newPassword } = req.body;
+    if (!resetToken || !newPassword) {
+      return res.status(400).json({ error: 'Reset code and new password are required' });
+    }
+
+    try {
+      const result = await authService.resetPassword(resetToken, newPassword);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // POST /api/auth/change-password
+  router.post('/change-password', async (req: Request, res: Response) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Sign in again to change your password' });
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required' });
+    }
+
+    try {
+      const decoded = authService.verifyToken(token);
+      const result = await authService.changePassword(decoded.userId, currentPassword, newPassword);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
     }
   });
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ArrowLeft, MessageSquare, Users, FileText, Image as ImageIcon, Send, Shield, Heart, MoreVertical, Flame , Settings, Trash2, Edit2, Camera, Check, X , Upload, Sparkles} from 'lucide-react';
+import { ArrowLeft, MessageSquare, Users, FileText, Image as ImageIcon, Send, Shield, Heart, MoreVertical, Flame , Settings, Trash2, Edit2, Camera, Check, X , Upload, Sparkles, Mic} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
@@ -19,9 +19,10 @@ interface GroupWallProps {
   onBack: () => void;
   onUpdate: (updates: any) => void;
   onDelete: () => void;
+  onStartLive?: () => void;
 }
 
-export const GroupWall: React.FC<GroupWallProps> = ({ group, onBack, onUpdate, onDelete }) => {
+export const GroupWall: React.FC<GroupWallProps> = ({ group, onBack, onUpdate, onDelete, onStartLive }) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'feed' | 'rules' | 'members'>('feed');
   const [postText, setPostText] = useState('');
@@ -134,9 +135,17 @@ export const GroupWall: React.FC<GroupWallProps> = ({ group, onBack, onUpdate, o
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-bold tracking-wide">Back</span>
             </button>
-            <button onClick={() => setShowSettings(true)} className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white backdrop-blur-md border border-white/10 transition-colors">
-              <Settings className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {onStartLive && (
+                <button onClick={onStartLive} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 text-black text-xs font-bold">
+                  <Mic className="w-3.5 h-3.5" />
+                  Start live call
+                </button>
+              )}
+              <button onClick={() => setShowSettings(true)} className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white backdrop-blur-md border border-white/10 transition-colors">
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           
           <div className="flex items-start justify-between gap-4">

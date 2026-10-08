@@ -157,16 +157,51 @@ export const RecoveryDashboard: React.FC = () => {
   const [activeMeeting, setActiveMeeting] = useState<RecoveryMeeting | null>(null);
 
   useEffect(() => {
-    // Fetch upcoming and live meetings
-    fetch('/api/recovery/meetings')
-      .then(res => res.json())
-      .then(data => {
-        if (data.meetings) {
-          setMeetings(data.meetings);
-        }
-      })
-      .catch(console.error);
+    let cancelled = false;
+    const loadMeetings = () => {
+      fetch('/api/recovery/meetings')
+        .then(res => res.json())
+        .then(data => {
+          if (!cancelled && data.meetings) setMeetings(data.meetings);
+        })
+        .catch(console.error);
+    };
+    loadMeetings();
+    const timer = setInterval(loadMeetings, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
+
+  const startLiveRoom = async (title?: string) => {
+    try {
+      const res = await fetch('/api/recovery/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title || 'Live Fellowship Room',
+          description: 'An open room. Come in and talk.',
+          status: 'live',
+          scheduledAt: new Date().toISOString(),
+          hostId: user?.id || 'host',
+          hostName: user?.name || 'Host',
+          hostAvatar: user?.avatarUrl,
+          format: 'open_discussion',
+          topic: 'Open fellowship',
+          scriptureFocus: 'James 5:16',
+        }),
+      });
+      const data = await res.json();
+      if (data.meeting) {
+        setMeetings(prev => [data.meeting, ...prev.filter(m => m.id !== data.meeting.id)]);
+        setActiveGroup(null);
+        setActiveMeeting(data.meeting);
+      }
+    } catch (err) {
+      console.error('Could not open live room:', err);
+    }
+  };
 
   const handleJoinMeeting = (meeting: RecoveryMeeting) => {
     setActiveMeeting(meeting);
@@ -386,7 +421,7 @@ export const RecoveryDashboard: React.FC = () => {
         {activeTab === 'groups' && (
           <div className="space-y-6">
             {activeGroup ? (
-              <GroupWall group={activeGroup} onBack={() => setActiveGroup(null)} onDelete={() => handleDeleteGroup(activeGroup.id)} onUpdate={(updates: any) => handleUpdateGroup(activeGroup.id, updates)} />
+              <GroupWall group={activeGroup} onBack={() => setActiveGroup(null)} onDelete={() => handleDeleteGroup(activeGroup.id)} onUpdate={(updates: any) => handleUpdateGroup(activeGroup.id, updates)} onStartLive={() => startLiveRoom(activeGroup.name)} />
             ) : (
               <>
             {/* Regular Groups */}
@@ -396,10 +431,16 @@ export const RecoveryDashboard: React.FC = () => {
                   <Users className="w-5 h-5 text-amber-400" />
                   Support Groups
                 </h2>
-                <button onClick={() => setIsCreatingGroup(true)} className="flex items-center gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded-full transition-colors">
-                  <Plus className="w-3.5 h-3.5" />
-                  Create Group
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => startLiveRoom()} className="flex items-center gap-1.5 text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-black px-3 py-1.5 rounded-full transition-colors">
+                    <Mic className="w-3.5 h-3.5" />
+                    Open Live Room
+                  </button>
+                  <button onClick={() => setIsCreatingGroup(true)} className="flex items-center gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded-full transition-colors">
+                    <Plus className="w-3.5 h-3.5" />
+                    Create Group
+                  </button>
+                </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

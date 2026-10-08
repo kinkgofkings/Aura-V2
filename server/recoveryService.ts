@@ -327,10 +327,14 @@ export class RecoveryService {
     const roomMap = liveParticipants.get(meetingId)!;
     roomMap.set(participant.userId, participant);
 
-    // Update attendee count on meeting object
+    // Update attendee count and open the room as soon as someone walks in.
     const meeting = this.getMeetingById(meetingId);
     if (meeting) {
       meeting.attendeeCount = Math.max(roomMap.size, 1);
+      if (meeting.status === 'scheduled') {
+        meeting.status = 'live';
+        this.saveState();
+      }
     }
 
     return Array.from(roomMap.values());

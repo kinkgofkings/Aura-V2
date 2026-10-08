@@ -28,7 +28,18 @@ export interface AuthUser {
 }
 
 export class AuthService {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database.Database) {
+    for (const sql of [
+      'ALTER TABLE users ADD COLUMN reset_token TEXT',
+      'ALTER TABLE users ADD COLUMN reset_token_expires TEXT',
+    ]) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        // Column already exists on databases created with the current schema.
+      }
+    }
+  }
 
   // Register new user
   async register(email: string, username: string, password: string, displayName?: string) {
@@ -164,9 +175,50 @@ export class AuthService {
       user.id
     );
 
-    console.log(`[AUTH] Password reset token for ${email}: ${reset_token}`);
+    console.log(`[AUTH] Password reset requested for ${email}`);
 
-    return { message: 'Password reset link sent' };
+    return { message: 'Password reset code created' };
+  }
+
+  signSession(userId: string, email: string) {
+    return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+  }
+
+  // Create a login only when this email is new. Never replaces an existing password.
+  async ensureAccount(email: string, username: string, displayName?: string) {
+    const existing = this.db.prepare('SELECT * FROM users WHERE email = ?').get(email) as AuthUser | undefined;
+    if (existing) {
+      return {
+        token: this.signSession(existing.id, existing.email),
+        user: this._sanitizeUser(existing),
+        created: false,
+      };
+    }
+
+    let handle = (username || 'member').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24) || 'member';
+    const taken = this.db.prepare('SELECT id FROM users WHERE username = ?').get(handle);
+    if (taken) handle = `${handle.slice(0, 18)}_${randomUUID().slice(0, 4)}`;
+
+    const created = await this.register(email, handle, `${randomUUID()}Aa1!`, displayName);
+    return {
+      token: this.signSession(created.id, created.email),
+      user: created,
+      created: true,
+    };
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 8) throw new Error('Password must be at least 8 characters');
+
+    const user = this.db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as AuthUser | undefined;
+    if (!user) throw new Error('User not found');
+
+    const passwordMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!passwordMatch) throw new Error('Current password is incorrect');
+
+    const password_hash = await bcrypt.hash(newPassword, 10);
+    this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(password_hash, user.id);
+    return { message: 'Password updated' };
   }
 
   // Reset password

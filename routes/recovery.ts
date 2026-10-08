@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { recoveryService } from '../server/recoveryService';
+import { pushToUser } from '../server/realtime';
 import { CORE_BIBLICAL_RECOVERY_PRINCIPLES } from '../src/content/recoveryPrinciples';
 import { RECOVERY_TEACHINGS_DATA } from '../src/content/recoveryTeachings';
 
@@ -103,6 +104,13 @@ export function createRecoveryRoutes(): Router {
         return res.status(400).json({ error: 'Valid signal payload required' });
       }
       recoveryService.addSignal(req.params.id, signal);
+      if (signal.toUserId) {
+        pushToUser(signal.toUserId, {
+          type: 'meeting:signal',
+          meetingId: req.params.id,
+          signal,
+        });
+      }
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to add signal' });
