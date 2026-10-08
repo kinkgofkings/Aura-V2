@@ -1,0 +1,35 @@
+name: Deploy Aura
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: aura-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Aura-prod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update the live server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: 54.80.229.108
+          username: ubuntu
+          key: ${{ secrets.AURA_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd /home/ubuntu/Aura-prod
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+            npm install --legacy-peer-deps --no-audit
+            npm run build
+            pm2 restart aura --update-env
+            pm2 save
+            curl -fsS http://127.0.0.1:3000/api/health
+            echo
