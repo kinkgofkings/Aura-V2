@@ -11,8 +11,12 @@ import {
   PrayerDriftCard, 
   SermonDriftCard, 
   NewMemberDriftCard, 
-  GroupActivityDriftCard 
+  GroupActivityDriftCard,
+  LessonDriftCard,
+  WordDriftCard
 } from './FeedDriftCards';
+import { KingdomMissionCard } from '../growth/KingdomMissionCard';
+import { composeEngagingFeed } from './composeFeed';
 
 const TAG_FILTERS = ['All', ...POST_CATEGORIES];
 
@@ -123,6 +127,8 @@ export const SocialFeed: React.FC = () => {
         </div>
       </div>
 
+      <KingdomMissionCard variant="banner" />
+
       {/* Filter Chips */}
       <div className="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-none mb-2">
         <div className="p-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 flex items-center justify-center flex-shrink-0">
@@ -145,58 +151,29 @@ export const SocialFeed: React.FC = () => {
 
       {/* Feed Posts Stream with Interleaved Drift Cards */}
       <div className="space-y-4">
-        {filteredPosts.length === 0 ? (
-          <div className="space-y-4">
-            <div className="text-center py-8 bg-[#0b0f24]/60 border border-white/5 rounded-3xl p-6 space-y-2">
-              <Sparkles className="w-8 h-8 text-amber-400/60 mx-auto" />
-              <h3 className="text-sm font-bold text-white">Latest From Your Faith Community</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Stay connected with recent prayers, sermons, new members, and fellowships happening across AURA.
-              </p>
-            </div>
-            <PrayerDriftCard />
-            <SermonDriftCard />
-            <NewMemberDriftCard member={recentMember} />
-            <GroupActivityDriftCard />
+        {filteredPosts.length === 0 && (
+          <div className="text-center py-8 bg-[#0b0f24]/60 border border-white/5 rounded-3xl p-6 space-y-2">
+            <Sparkles className="w-8 h-8 text-amber-400/60 mx-auto" />
+            <h3 className="text-sm font-bold text-white">Latest From Your Faith Community</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Stay connected with recent prayers, sermons, new members, and fellowships happening across AURA.
+            </p>
           </div>
-        ) : (
-          filteredPosts.map((post, index) => {
-            // Interleave drift cards throughout the feed
-            const showPrayerDrift = index === 0;
-            const showSermonDrift = index === 2 || (index > 2 && index % 6 === 2);
-            const showNewMemberDrift = index === 4 || (index > 4 && index % 6 === 4);
-            const showGroupActivityDrift = index === 6 || (index > 6 && index % 6 === 0);
-
-            return (
-              <React.Fragment key={post.id}>
-                <PostCard post={post} />
-
-                {showPrayerDrift && <PrayerDriftCard index={index} />}
-                {showSermonDrift && <SermonDriftCard index={index} />}
-                {showNewMemberDrift && <NewMemberDriftCard member={recentMember} />}
-                {showGroupActivityDrift && <GroupActivityDriftCard />}
-              </React.Fragment>
-            );
-          })
         )}
-
-        {/* If fewer than 5 posts, ensure remaining community drift cards still appear */}
-        {filteredPosts.length > 0 && filteredPosts.length < 3 && (
-          <>
-            <SermonDriftCard />
-            <NewMemberDriftCard member={recentMember} />
-            <GroupActivityDriftCard />
-          </>
-        )}
-        {filteredPosts.length >= 3 && filteredPosts.length < 5 && (
-          <>
-            <NewMemberDriftCard member={recentMember} />
-            <GroupActivityDriftCard />
-          </>
-        )}
-        {filteredPosts.length >= 5 && filteredPosts.length < 7 && (
-          <GroupActivityDriftCard />
-        )}
+        {activeFilter === 'All'
+          ? composeEngagingFeed(filteredPosts.length).map((entry, index) => {
+              if (entry.kind === 'post') {
+                const post = filteredPosts[entry.postIndex];
+                return post ? <PostCard key={post.id} post={post} /> : null;
+              }
+              if (entry.kind === 'sermon') return <SermonDriftCard key={`sermon-${entry.slot}-${index}`} index={entry.slot} />;
+              if (entry.kind === 'prayer') return <PrayerDriftCard key={`prayer-${entry.slot}-${index}`} index={entry.slot} />;
+              if (entry.kind === 'lesson') return <LessonDriftCard key={`lesson-${entry.slot}-${index}`} index={entry.slot} />;
+              if (entry.kind === 'member') return <NewMemberDriftCard key={`member-${entry.slot}-${index}`} member={recentMember} />;
+              if (entry.kind === 'word') return <WordDriftCard key={`word-${entry.slot}-${index}`} />;
+              return <GroupActivityDriftCard key={`group-${index}`} />;
+            })
+          : filteredPosts.map((post) => <PostCard key={post.id} post={post} />)}
       </div>
 
       {/* Invite Friends & Share App Card at end of feed */}

@@ -20,6 +20,7 @@ import fs from 'fs';
 import { synthesizeBibleAudio } from './server/audioService';
 import { startYoutubeFolderWatcher, syncYoutubeSermons } from './services/youtubeSyncService';
 import { startLighthouseDailyScheduler, syncLighthouseSermons } from './services/lighthouseSyncService';
+import { completeMission, getUserMissionState, prayNow } from './services/growthStore';
 
 async function startServer() {
   const app = express();
@@ -289,6 +290,52 @@ async function startServer() {
     const post = db.getPostById(req.params.id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
     res.json(post);
+  });
+
+  app.get('/api/missions/today', (req, res) => {
+    const userId = typeof req.query.userId === 'string' ? req.query.userId : '';
+    res.json(getUserMissionState(userId));
+  });
+
+  app.post('/api/missions/:id/complete', (req, res) => {
+    const { userId, notes, shareToFeed, authorName, authorHandle, authorAvatar } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const result = completeMission({ userId, notes, shareToFeed: Boolean(shareToFeed) });
+    db.updateUser(userId, {
+      missionStreak: result.streak,
+      missionLastCompletedDate: result.mission.date,
+    } as any);
+    let post = null;
+    if (shareToFeed && !result.alreadyCompleted) {
+      const note = notes ? `\n\n${notes}` : '';
+      post = db.createPost({
+        authorId: userId,
+        authorName: authorName || 'AURA Member',
+        authorHandle: authorHandle || 'member',
+        authorAvatar: authorAvatar || '',
+        content: `Mission Completed: ${result.mission.title}\n${result.mission.scriptureRef}\n${result.mission.promptText}${note}`,
+        mediaUrls: [],
+        tags: ['MissionCompleted', 'ActAndAbide', result.mission.scriptureRef.replace(/[^a-zA-Z0-9]/g, '')],
+        location: 'Act & Abide',
+      });
+    }
+    res.json({ ...result, post });
+  });
+
+  app.post('/api/prayers/:id/pray-now', (req, res) => {
+    const { userId, userName, authorUserId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const result = prayNow(req.params.id, userId);
+    if (result.allowed && authorUserId && authorUserId !== userId) {
+      pushToUser(authorUserId, {
+        type: 'praying_now',
+        prayerId: req.params.id,
+        userName: userName || 'A friend',
+        message: `${userName || 'A friend'} is lifting your request before the Lord right now.`,
+        activeIntercessionCount: result.activeIntercessionCount,
+      });
+    }
+    res.json(result);
   });
 
   app.post('/api/posts', (req, res) => {

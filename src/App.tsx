@@ -38,6 +38,8 @@ import { GospelTractModal } from './components/auth/GospelTractModal';
 import { RecoveryDashboard } from './components/recovery/RecoveryDashboard';
 
 import { UnverifiedBanner } from './components/auth/UnverifiedBanner';
+import { realtime } from './services/realtime';
+import { notificationService } from './services/notifications';
 import { InAppBrowser } from './components/common/InAppBrowser';
 
 function MainApp() {
@@ -95,6 +97,20 @@ function MainApp() {
 
   const { user, isAuthModalOpen, setIsAuthModalOpen } = useAuth();
   const { isNotificationsOpen, closeNotifications, openNotifications } = useNotifications();
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    realtime.connect(user.id);
+    return realtime.on('praying_now', (event) => {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([30, 40, 30]);
+      notificationService.notify({
+        type: 'prayer',
+        title: 'Praying now',
+        body: event.message || `${event.userName || 'A friend'} is lifting your request before the Lord right now.`,
+        playSound: true,
+      });
+    });
+  }, [user?.id]);
 
   React.useEffect(() => {
     const handleTabNav = (e: Event) => {

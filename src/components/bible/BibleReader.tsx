@@ -34,6 +34,8 @@ import {
   fetchBibleTtsAudio,
   playSpeechSynthesisFallback
 } from '../../utils/audioUtils';
+import { AmbienceMixer } from '../common/AmbienceMixer';
+import { ambienceEngine } from '../../services/ambienceEngine';
 
 interface BibleVerse {
   verse: number;
@@ -153,6 +155,10 @@ export function BibleReader({
 
   // Audio refs for HTML5 Audio element and Web Audio API fallback
   const htmlAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return ambienceEngine.registerNarration(htmlAudioRef.current);
+  }, []);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const currentObjectUrlRef = useRef<string | null>(null);
@@ -354,6 +360,7 @@ export function BibleReader({
         setIsSpeaking(false);
         setAudioLoadingVerse(null);
         setAudioStatusMessage(`Finished ${selectedBook} Chapter ${selectedChapter}`);
+        ambienceEngine.notifyChapterEnded();
       }
     };
 
@@ -397,7 +404,7 @@ export function BibleReader({
             const previousUrl = currentObjectUrlRef.current;
             currentObjectUrlRef.current = audioUrl;
             audioEl.src = audioUrl;
-            audioEl.volume = 1.0;
+            audioEl.volume = ambienceEngine.narrationVolume;
 
             audioEl.onended = () => {
               if (!isPlayingRef.current) return;
@@ -874,6 +881,9 @@ export function BibleReader({
           </button>
         </div>
       </div>
+      {readerMode === 'listen' && (
+        <AmbienceMixer narrationRef={htmlAudioRef} onSleep={stopPlayback} />
+      )}
       {/* Top Header & Church Quick-Jump Bar */}
       <div className="bg-gradient-to-r from-amber-950/80 via-yellow-950/70 to-slate-900/80 border border-amber-500/30 rounded-2xl p-4 shadow-xl backdrop-blur-md">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">

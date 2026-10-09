@@ -14,6 +14,8 @@ export interface UserProfile {
   followingCount: number;
   isVerified?: boolean;
   joinedAt: string;
+  missionStreak?: number;
+  missionLastCompletedDate?: string;
   cleanDate?: string; // Add cleanDate for recovery tracking
   authProvider?: 'google' | 'email' | 'facebook' | 'github' | 'phone' | 'guest' | 'demo';
   hasPassword?: boolean;
@@ -145,7 +147,7 @@ export interface CallSession {
   roomId: string;
 }
 
-export type NotificationType = 'chat' | 'message' | 'call' | 'story' | 'like' | 'comment' | 'follow' | 'system';
+export type NotificationType = 'chat' | 'message' | 'call' | 'story' | 'like' | 'comment' | 'follow' | 'system' | 'prayer';
 
 export interface AppNotification {
   id: string;

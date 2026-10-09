@@ -25,6 +25,7 @@ import { X,
 } from "lucide-react";
 import { getSermonCoverImage, getFallbackSpiritualCover } from "../../utils/sermonCovers";
 import { soundEffects } from "../../services/audio";
+import { compareSermonLibrary, isWorshipGathering, sermonMatchesQuery } from "../../../services/lighthouseCatalog";
 
 export interface SermonItem {
   id: string;
@@ -69,6 +70,7 @@ export function PodcastFeed({
   const [loading, setLoading] = useState(true);
   const [formatFilter, setFormatFilter] = useState<"all" | "audio" | "video">("all");
   const [sourceFilter, setSourceFilter] = useState<"all" | "community" | "sermonindex" | "stories">("all");
+  const [worshipOnly, setWorshipOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -349,8 +351,10 @@ export function PodcastFeed({
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [sermons, formatFilter]);
 
-  const filtered = sermons.filter((item) => {
+  const filtered = useMemo(() => {
+    const matches = sermons.filter((item) => {
     if (formatFilter !== "all" && item.format !== formatFilter) return false;
+    if (worshipOnly && !isWorshipGathering(item)) return false;
     if (sourceFilter === "stories") {
       const isStory = 
         item.title?.toLowerCase().includes("audio story") || 
@@ -384,17 +388,11 @@ export function PodcastFeed({
       }
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = item.title?.toLowerCase().includes(q);
-      const matchSpeaker = item.speaker?.toLowerCase().includes(q);
-      const matchRef = item.scriptureRef?.toLowerCase().includes(q);
-      const matchSeries = item.series?.toLowerCase().includes(q);
-      const matchChannel = item.channel?.toLowerCase().includes(q);
-      if (!matchTitle && !matchSpeaker && !matchRef && !matchSeries && !matchChannel) return false;
-    }
+    if (searchQuery.trim() && !sermonMatchesQuery(item, searchQuery)) return false;
     return true;
   });
+    return matches.sort((a, b) => compareSermonLibrary(a, b));
+  }, [sermons, formatFilter, sourceFilter, worshipOnly, selectedChannel, selectedSeries, searchQuery]);
 
   const handleShareSermon = (sermon: SermonItem) => {
     soundEffects.playTap();
@@ -489,21 +487,30 @@ export function PodcastFeed({
           <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto p-0.5">
             <button
               type="button"
-              onClick={() => setSourceFilter("all")}
-              className={"px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap " + (sourceFilter === "all" ? "bg-white/15 text-white shadow border border-white/20" : "text-slate-400 hover:text-white")}
+              onClick={() => {
+                setWorshipOnly(false);
+                setSourceFilter("all");
+              }}
+              className={"px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap " + (sourceFilter === "all" && !worshipOnly ? "bg-white/15 text-white shadow border border-white/20" : "text-slate-400 hover:text-white")}
             >
               All Sources
             </button>
             <button
               type="button"
-              onClick={() => setSourceFilter("community")}
+              onClick={() => {
+                setWorshipOnly(false);
+                setSourceFilter("community");
+              }}
               className={"px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap " + (sourceFilter === "community" ? "bg-emerald-600 text-white shadow" : "text-slate-400 hover:text-white")}
             >
               Community
             </button>
             <button
               type="button"
-              onClick={() => setSourceFilter("sermonindex")}
+              onClick={() => {
+                setWorshipOnly(false);
+                setSourceFilter("sermonindex");
+              }}
               className={"px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 " + (sourceFilter === "sermonindex" ? "bg-yellow-600 text-white shadow" : "text-slate-400 hover:text-white")}
             >
               <Flame className="w-3.5 h-3.5 text-amber-300" />
@@ -512,6 +519,7 @@ export function PodcastFeed({
             <button
               type="button"
               onClick={() => {
+                setWorshipOnly(false);
                 setSourceFilter("stories");
                 setFormatFilter("audio");
               }}
@@ -519,6 +527,18 @@ export function PodcastFeed({
             >
               <BookOpen className="w-3.5 h-3.5 text-amber-200" />
               <span>Audio Stories</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setWorshipOnly(true);
+                setSourceFilter("all");
+                setSelectedChannel("all");
+                setSelectedSeries("all");
+              }}
+              className={"px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap " + (worshipOnly ? "bg-sky-600 text-white shadow" : "text-slate-400 hover:text-white")}
+            >
+              Sunday & Wednesday
             </button>
           </div>
 
@@ -695,7 +715,11 @@ export function PodcastFeed({
       ) : filtered.length === 0 ? (
         <div className="bg-slate-900/40 border border-white/10 rounded-3xl p-12 text-center space-y-2">
           <p className="text-base font-bold text-white">No sermons found matching this filter</p>
-          <p className="text-xs text-slate-400">Try changing your search term, switching format, or selecting All Sources.</p>
+          <p className="text-xs text-slate-400">
+            {worshipOnly
+              ? "No Sunday or Wednesday gatherings are in the library yet. Use Sync LBC Sermons to pull the latest Lighthouse services."
+              : "Try changing your search term, switching format, or selecting All Sources."}
+          </p>
         </div>
       ) : (
         <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "space-y-3"}>

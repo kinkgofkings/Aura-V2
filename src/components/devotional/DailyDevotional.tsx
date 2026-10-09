@@ -5,6 +5,7 @@ import { useSocial } from '../../context/SocialContext';
 import { useAuth } from '../../context/AuthContext';
 import { soundEffects } from '../../services/audio';
 import { generateDevotionalCardImage } from '../../utils/devotionalCardGenerator';
+import { KingdomMissionCard } from '../growth/KingdomMissionCard';
 
 export const DailyDevotionalTab = () => {
   const [devotional, setDevotional] = useState<DailyDevotional | null>(null);
@@ -117,6 +118,7 @@ ${currentEntry.prayer}`;
       </div>
 
       <div className="p-4 sm:p-6 space-y-6">
+        <KingdomMissionCard />
         {/* Scripture Card */}
         <div className="bg-white/5 border border-white/10 rounded-3xl p-6 relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-white/5 to-transparent rounded-bl-[100px] pointer-events-none" />

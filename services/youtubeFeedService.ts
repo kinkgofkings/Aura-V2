@@ -1,4 +1,6 @@
 import https from "https";
+import { classifyWorshipService, isWorshipGathering, sermonTimestamp } from "./lighthouseCatalog";
+import { fetchLighthouseUploads } from "./lighthouseSyncService";
 
 export interface MinistryChannel {
   name: string;
@@ -845,7 +847,11 @@ function parseXml(xml: string, ch: MinistryChannel): SyncedSermonItem[] {
       seriesPart = parseInt(partMatch[1], 10);
     }
 
-    if (title.toLowerCase().includes("kingdom") || ch.name.includes("Tony Evans")) {
+    const lighthouseService = ch.name.includes("Lighthouse") ? classifyWorshipService(title) : null;
+
+    if (lighthouseService?.series) {
+      series = lighthouseService.series;
+    } else if (title.toLowerCase().includes("kingdom") || ch.name.includes("Tony Evans")) {
       series = "Kingdom Authority & Spiritual Warfare";
     } else if (title.toLowerCase().includes("journey") || ch.name.includes("Scott Pauley")) {
       series = "Enjoying The Journey - Psalms";
@@ -871,7 +877,9 @@ function parseXml(xml: string, ch: MinistryChannel): SyncedSermonItem[] {
       channel: ch.name,
       series,
       seriesPart,
-      summary: summary || `Broadcast from ${ch.name}`,
+      summary: lighthouseService?.isWorshipService
+        ? `${lighthouseService.label} from Lighthouse Baptist Church. Sunday and Wednesday worship service. ${summary || title}`
+        : (summary || `Broadcast from ${ch.name}`),
       mediaType: "video",
       format: "video",
       source: "community",
@@ -880,7 +888,9 @@ function parseXml(xml: string, ch: MinistryChannel): SyncedSermonItem[] {
       mediaUrl: `https://www.youtube.com/watch?v=${youtubeId}`,
       thumbnailUrl: `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
       publishedAt,
-      topics: [{ name: "Sermon", slug: "sermon" }]
+      topics: lighthouseService?.isWorshipService
+        ? [{ name: "Worship Service", slug: "worship-service" }, { name: "Sunday Wednesday", slug: "sunday-wednesday" }]
+        : [{ name: "Sermon", slug: "sermon" }]
     });
   }
   return list;
@@ -980,8 +990,45 @@ export async function getLiveMinistryFeed(db?: any): Promise<SyncedSermonItem[]>
       }
     }
 
+    try {
+      const lighthouseUploads = await fetchLighthouseUploads();
+      for (const upload of lighthouseUploads) {
+        combinedMap.set(`yt-${upload.youtubeId}`, {
+          id: `yt-${upload.youtubeId}`,
+          title: upload.title,
+          speaker: upload.speaker,
+          speakerSlug: "lighthousewinc",
+          speakerTitle: "Lighthouse Baptist Church • Winchester, VA",
+          channel: "Lighthouse Baptist Church",
+          series: upload.series,
+          seriesPart: upload.seriesPart ?? undefined,
+          summary: upload.description,
+          mediaType: "video",
+          format: "video",
+          source: "community",
+          featured: true,
+          youtubeId: upload.youtubeId,
+          mediaUrl: `https://www.youtube.com/watch?v=${upload.youtubeId}`,
+          thumbnailUrl: `https://i.ytimg.com/vi/${upload.youtubeId}/hqdefault.jpg`,
+          publishedAt: upload.publishedAt,
+          topics: upload.isWorshipService
+            ? [{ name: "Worship Service", slug: "worship-service" }, { name: "Sunday Wednesday", slug: "sunday-wednesday" }]
+            : [{ name: "Sermon", slug: "sermon" }]
+        });
+      }
+    } catch (lighthouseErr) {
+      console.error("[Ministry Feed] Lighthouse worship catalog failed:", lighthouseErr);
+    }
+
     const combined = Array.from(combinedMap.values());
-    combined.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    combined.sort((a, b) => {
+      const boost = (item: SyncedSermonItem) => {
+        const time = sermonTimestamp(item);
+        if (isWorshipGathering(item) && time > 0 && now - time < 21 * 24 * 60 * 60 * 1000) return time + 1e15;
+        return time;
+      };
+      return boost(b) - boost(a);
+    });
 
     if (combined.length > 0) {
       cachedFeed = combined;

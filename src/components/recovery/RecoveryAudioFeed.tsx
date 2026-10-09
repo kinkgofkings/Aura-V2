@@ -20,6 +20,8 @@ import { RecoveryTeaching } from '../../types/recovery';
 import { soundEffects } from '../../services/audio';
 import { extractYouTubeInfo } from '../../utils/mediaUtils';
 import { VideoEmbed } from '../common/VideoEmbed';
+import { AmbienceMixer } from '../common/AmbienceMixer';
+import { ambienceEngine } from '../../services/ambienceEngine';
 
 export const RecoveryAudioFeed: React.FC = () => {
   const [teachings, setTeachings] = useState<RecoveryTeaching[]>(RECOVERY_TEACHINGS_DATA);
@@ -63,11 +65,18 @@ export const RecoveryAudioFeed: React.FC = () => {
 
   // Update audio element properties
   useEffect(() => {
-    if (audioRef.current) {
+    const applyVoice = () => {
+      if (!audioRef.current) return;
       audioRef.current.playbackRate = playbackRate;
-      audioRef.current.volume = isMuted ? 0 : volume;
-    }
+      audioRef.current.volume = isMuted ? 0 : ambienceEngine.narrationVolume;
+    };
+    applyVoice();
+    return ambienceEngine.subscribe(applyVoice);
   }, [playbackRate, volume, isMuted]);
+
+  useEffect(() => {
+    return ambienceEngine.registerNarration(audioRef.current);
+  }, []);
 
   const handlePlayTrack = (track: RecoveryTeaching) => {
     soundEffects.playTap();
@@ -162,7 +171,10 @@ export const RecoveryAudioFeed: React.FC = () => {
         ref={audioRef}
         src={currentTrack?.audioUrl}
         onTimeUpdate={handleTimeUpdate}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          ambienceEngine.notifyChapterEnded();
+        }}
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}
       />
@@ -297,6 +309,13 @@ export const RecoveryAudioFeed: React.FC = () => {
                     <span>{formatTime(duration || 1720)}</span>
                   </div>
                 </div>
+                <AmbienceMixer
+                  narrationRef={audioRef}
+                  onSleep={() => {
+                    audioRef.current?.pause();
+                    setIsPlaying(false);
+                  }}
+                />
               </>
             );
           })()}
