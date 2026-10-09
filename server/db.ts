@@ -19,6 +19,8 @@ export interface DBUser {
   googleId?: string;
   passwordHash?: string;
   authProvider?: 'google' | 'email' | 'guest' | 'demo';
+  missionStreak?: number;
+  missionLastCompletedDate?: string;
 }
 
 export interface DBComment {

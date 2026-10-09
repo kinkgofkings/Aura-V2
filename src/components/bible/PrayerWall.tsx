@@ -15,6 +15,8 @@ interface PrayerItem {
   isAnswered: boolean;
   praiseUpdate?: string;
   createdAt: string;
+  authorId?: string;
+  activeIntercessionCount?: number;
 }
 
 const STORAGE_KEY = 'aura_church_prayer_wall';
@@ -73,7 +75,9 @@ const INITIAL_DEFAULT_PRAYERS: PrayerItem[] = [
 ];
 
 export const PrayerWall: React.FC = () => {
-  const { user } = useAuth();
+  const { user, allUsers } = useAuth();
+  const [glowingId, setGlowingId] = useState<string | null>(null);
+  const [prayNote, setPrayNote] = useState<string | null>(null);
   const [prayers, setPrayers] = useState<PrayerItem[]>(() => {
     let initialList = INITIAL_DEFAULT_PRAYERS;
     try {
@@ -221,10 +225,46 @@ export const PrayerWall: React.FC = () => {
       prayedUsers: user ? [user.id] : [],
       isAnswered: false,
       createdAt: new Date().toISOString(),
+      authorId: user?.id,
+      activeIntercessionCount: 0,
     };
 
     setPrayers([item, ...prayers]);
     setNewRequest('');
+  };
+
+  const handlePrayingNow = async (prayer: PrayerItem) => {
+    if (!user) {
+      setPrayNote('Sign in to let them know you are praying.');
+      return;
+    }
+    soundEffects.playTap();
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+    setGlowingId(prayer.id);
+    window.setTimeout(() => setGlowingId((current) => (current === prayer.id ? null : current)), 2600);
+    const author = allUsers.find((member) => member.id === prayer.authorId || member.handle === prayer.authorHandle);
+    try {
+      const response = await fetch(`/api/prayers/${encodeURIComponent(prayer.id)}/pray-now`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          userName: user.name,
+          authorUserId: author?.id || prayer.authorId || '',
+        }),
+      });
+      const data = await response.json();
+      if (data.limited || data.allowed === false) {
+        setPrayNote('You already sent a live prayer for this request. You can pray again in a few minutes.');
+        return;
+      }
+      setPrayers((prev) => prev.map((item) => item.id === prayer.id
+        ? { ...item, activeIntercessionCount: data.activeIntercessionCount || (item.activeIntercessionCount || 0) + 1 }
+        : item));
+      setPrayNote('They will know you are praying right now.');
+    } catch {
+      setPrayNote('Prayer noted on this device. Live delivery will retry when you are online.');
+    }
   };
 
   const handlePrayFor = (prayerId: string) => {
@@ -379,7 +419,9 @@ export const PrayerWall: React.FC = () => {
               key={prayer.id}
               id={`prayer-card-${prayer.id}`}
               className={`p-4 sm:p-5 rounded-2xl border transition-all duration-500 relative overflow-hidden ${
-                isTargeted
+                glowingId === prayer.id
+                  ? 'ring-2 ring-rose-300 border-rose-300 shadow-[0_0_32px_rgba(251,113,133,0.55)] bg-rose-950/40'
+                  : isTargeted
                   ? 'ring-2 ring-amber-400 border-amber-400 bg-gradient-to-br from-amber-950/50 via-slate-900 to-amber-950/30 shadow-[0_0_35px_rgba(245,158,11,0.35)] scale-[1.01]'
                   : prayer.isAnswered
                   ? 'bg-emerald-950/20 border-emerald-500/30'
@@ -485,6 +527,14 @@ export const PrayerWall: React.FC = () => {
                     {prayer.prayedCount}
                   </span>
                 </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrayingNow(prayer)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-600 text-white shadow-sm"
+                  >
+                    Praying Now
+                    <span className="px-1.5 py-0.5 rounded-md bg-black/30 text-[10px]">{prayer.activeIntercessionCount || 0}</span>
+                  </button>
 
                   {isOwner && !prayer.isAnswered && (
                     <button
@@ -551,6 +601,7 @@ export const PrayerWall: React.FC = () => {
           );
         })}
       </div>
+      {prayNote && <p className="text-xs text-rose-200 text-center">{prayNote}</p>}
     </div>
   );
 };

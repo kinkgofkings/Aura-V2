@@ -13,6 +13,7 @@ import { SERMONAUDIO_FEED, SERMONAUDIO_SPEAKERS } from '../src/content/sermonaud
 import { sermonIndexService, SERMONINDEX_SPEAKERS_CATALOG, SERMONINDEX_TOPICS_CATALOG } from '../services/sermonIndexService';
 import { synthesizeBibleAudio } from '../server/audioService';
 import { syncYoutubeSermons } from '../services/youtubeSyncService';
+import { getChronosContext } from '../services/chronosContext';
 
 const router = Router();
 const kjvLoader = new KJVLoader();
@@ -110,6 +111,12 @@ export function createBibleRoutes(db: BibleStudyDB): Router {
     } catch (err) {
       res.status(500).json({ error: 'Search failed' });
     }
+  });
+
+  // GET /api/bible/context/:book/:chapter
+  router.get('/context/:book/:chapter', (req: Request, res: Response) => {
+    const chapter = parseInt(req.params.chapter, 10) || 1;
+    res.json(getChronosContext(req.params.book, chapter));
   });
 
   // GET /api/bible/study

@@ -10,6 +10,9 @@ import { Avatar } from '../common/Avatar';
 import { AsyncMedia } from '../common/AsyncMedia';
 import { UserProfile } from '../../types';
 import { getSermonCoverImage, getFallbackSpiritualCover } from '../../utils/sermonCovers';
+import { compareSermonLibrary, isWorshipGathering } from '../../../services/lighthouseCatalog';
+import { INITIAL_LESSONS } from '../../content/initialCourses';
+import { getCurrentDevotional } from '../../content/devotionals';
 
 // ==========================================
 // 1. PRAYER WALL DRIFT CARD
@@ -366,16 +369,9 @@ export const SermonDriftCard: React.FC<{ index?: number }> = ({ index = 0 }) => 
         } catch {}
 
         if (combined.length > 0) {
-          // Sort by recency to emphasize newly added media and newly made videos/audios
-          combined.sort((a, b) => {
-            const timeA = new Date(a.publishedAt || a.dateRecorded || a.createdAt || 0).getTime();
-            const timeB = new Date(b.publishedAt || b.dateRecorded || b.createdAt || 0).getTime();
-            return timeB - timeA;
-          });
-
-          // Rotate through diverse channels (RU Recovery, Tony Evans, Lighthouse, Scott Pauley, Fargo Baptist, etc.)
-          const pickIdx = Math.abs((index * 2 + Math.floor(Date.now() / (1000 * 60 * 15))) % combined.length);
-          setSermon(combined[pickIdx]);
+          const worship = combined.filter((item) => isWorshipGathering(item)).sort(compareSermonLibrary);
+          const pool = worship.length > 0 ? worship : combined.sort(compareSermonLibrary);
+          setSermon(pool[index % pool.length]);
         }
       } catch (e) {
         console.warn('Error loading sermon for feed:', e);
@@ -828,6 +824,53 @@ export const GroupActivityDriftCard: React.FC<GroupActivityProps> = () => {
           </button>
         </div>
       </div>
+    </div>
+  );
+};
+
+export const LessonDriftCard: React.FC<{ index?: number }> = ({ index = 0 }) => {
+  const lesson = INITIAL_LESSONS[index % INITIAL_LESSONS.length];
+  if (!lesson) return null;
+
+  return (
+    <div className="rounded-3xl bg-gradient-to-br from-indigo-950/50 via-[#0a1024]/95 to-slate-950 border border-indigo-400/25 p-4 sm:p-5 shadow-2xl space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-200 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-400/30">
+          Course lesson
+        </span>
+        <BookOpen className="w-4 h-4 text-indigo-300" />
+      </div>
+      <div>
+        <p className="text-[11px] text-indigo-200/80">{lesson.courseTitle || 'Favorite course'}</p>
+        <h3 className="text-sm font-bold text-white mt-0.5">{lesson.title}</h3>
+        {lesson.scriptureRef && <p className="text-xs text-amber-200 mt-1">{lesson.scriptureRef}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          soundEffects.playTap();
+          window.dispatchEvent(new CustomEvent('navigate_tab', { detail: { tab: 'bible' } }));
+        }}
+        className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-100 text-xs font-bold inline-flex items-center gap-1"
+      >
+        Open in Courses
+        <ArrowRight className="w-3 h-3" />
+      </button>
+    </div>
+  );
+};
+
+export const WordDriftCard: React.FC = () => {
+  const day = getCurrentDevotional();
+  const hour = new Date().getHours();
+  const entry = hour < 11 ? day.morning : hour < 17 ? day.midday : day.evening;
+
+  return (
+    <div className="rounded-3xl bg-gradient-to-br from-amber-950/40 via-[#0a1024]/95 to-yellow-950/20 border border-amber-400/25 p-4 sm:p-5 shadow-2xl space-y-2">
+      <span className="text-[10px] font-black uppercase tracking-wider text-amber-200">Word of the day</span>
+      <p className="text-sm font-serif italic text-white leading-relaxed">"{entry.text}"</p>
+      <p className="text-xs font-bold text-amber-200">{entry.reference} (KJV)</p>
+      <p className="text-xs text-slate-300">{entry.reminder}</p>
     </div>
   );
 };

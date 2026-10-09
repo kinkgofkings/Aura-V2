@@ -20,6 +20,7 @@ import { PodcastFeed } from "./PodcastFeed";
 import { ScriptureLinker } from "./ScriptureLinker";
 import { CompleteLessonCard } from "./LessonContentRenderer";
 import { PrayerWall } from "./PrayerWall";
+import { ChronosDrawer } from "./ChronosDrawer";
 import { getBooksByTestament } from "../../content/bibleBooks";
 import { INITIAL_COURSES, INITIAL_LESSONS } from "../../content/initialCourses";
 
@@ -545,6 +546,8 @@ export function BibleStudy() {
               </button>
             </div>
           </div>
+
+          <ChronosDrawer book={selectedBook} chapter={selectedChapter} />
 
           {studyLoading && (
             <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-12 text-center space-y-3">

@@ -1,4 +1,4 @@
-export type NotificationType = 'message' | 'chat' | 'call' | 'story' | 'system' | 'like' | 'comment' | 'follow';
+export type NotificationType = 'message' | 'chat' | 'call' | 'story' | 'system' | 'like' | 'comment' | 'follow' | 'prayer';
 
 export interface NotificationPayload {
   id?: string;

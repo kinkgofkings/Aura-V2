@@ -1,11 +1,35 @@
 import https from 'https';
 import { BibleStudyDB } from '../server/bible/models';
+import {
+  classifyWorshipService,
+  extractLockupVideos,
+  parseServiceDate,
+  speakerFromTitle,
+  type LockupVideo,
+} from './lighthouseCatalog';
 
 export interface SyncedVideoResult {
   addedCount: number;
   existingCount: number;
+  worshipCount: number;
   totalNow: number;
 }
+
+export interface LighthouseUpload {
+  youtubeId: string;
+  title: string;
+  speaker: string;
+  series: string;
+  seriesPart: number | null;
+  description: string;
+  publishedAt: string;
+  isWorshipService: boolean;
+  serviceKind?: string;
+}
+
+const CHANNEL_ID = 'UC-rPauVwKrxsFn05cecsF-w';
+const VIDEOS_TAB = 'EgZ2aWRlb3PyBgQKAjoA';
+const LIVE_TAB = 'EgdzdHJlYW1z8gYECgJ6AA==';
 
 function fetchUrl(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -14,7 +38,7 @@ function fetchUrl(url: string): Promise<string> {
       {
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
       },
@@ -24,6 +48,42 @@ function fetchUrl(url: string): Promise<string> {
         res.on('end', () => resolve(data));
       }
     ).on('error', reject);
+  });
+}
+
+function postJson(url: string, body: unknown): Promise<unknown> {
+  const payload = JSON.stringify(body);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => (data += c));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }
+    );
+    req.setTimeout(12000, () => {
+      req.destroy();
+      reject(new Error(`Timeout posting ${url}`));
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
   });
 }
 
@@ -45,139 +105,197 @@ function fetchOembed(id: string): Promise<{ title: string; author_name: string }
   });
 }
 
+async function browseChannelTab(params: string): Promise<LockupVideo[]> {
+  const payload = await postJson('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+    context: {
+      client: {
+        clientName: 'WEB',
+        clientVersion: '2.20261008.01.00',
+        hl: 'en',
+        gl: 'US',
+      },
+    },
+    browseId: CHANNEL_ID,
+    params,
+  });
+  return extractLockupVideos(payload);
+}
+
+function uploadsFromLockups(videos: LockupVideo[]): LighthouseUpload[] {
+  return videos.map((video) => {
+    const classified = classifyWorshipService(video.title);
+    let series = classified.series || 'Sunday Sanctuary Expositions';
+    let seriesPart: number | null = null;
+    if (!classified.isWorshipService) {
+      const partMatch = video.title.match(/part\s*(\d+)/i) || video.title.match(/pt\.?\s*(\d+)/i);
+      if (partMatch) {
+        seriesPart = parseInt(partMatch[1], 10);
+        const stem = video.title.split(/part\s*\d+|pt\.?\s*\d+/i)[0].replace(/[-|:]$/, '').trim();
+        if (stem) series = stem;
+      }
+    }
+    const speaker = speakerFromTitle(video.title);
+    const publishedAt = parseServiceDate(video.title, video.meta);
+    const description = classified.isWorshipService
+      ? `${classified.label} from Lighthouse Baptist Church in Winchester, VA. ${video.title}. Sunday and Wednesday worship service preached by ${speaker}.`
+      : `Expository sermon from Lighthouse Baptist Church • Winchester, VA. Preached by ${speaker}.`;
+    return {
+      youtubeId: video.youtubeId,
+      title: video.title,
+      speaker,
+      series,
+      seriesPart,
+      description,
+      publishedAt,
+      isWorshipService: classified.isWorshipService,
+      serviceKind: classified.kind,
+    };
+  });
+}
+
 /**
- * Sweeps Lighthouse Baptist Church YouTube channel (@lighthousewinc)
- * for all uploaded sermons and live stream broadcasts, inserting any newly
- * discovered messages into SQLite so they multiply and accumulate permanently.
+ * Live Sunday and Wednesday gatherings are published on the channel Live tab.
+ * The public videos RSS for this channel is unavailable, so the catalog is read
+ * from YouTube's browse API (videos + live).
+ */
+export async function fetchLighthouseUploads(): Promise<LighthouseUpload[]> {
+  const [live, videos] = await Promise.all([
+    browseChannelTab(LIVE_TAB).catch((err) => {
+      console.warn('[LBC Sync] Live tab browse failed:', err);
+      return [] as LockupVideo[];
+    }),
+    browseChannelTab(VIDEOS_TAB).catch((err) => {
+      console.warn('[LBC Sync] Videos tab browse failed:', err);
+      return [] as LockupVideo[];
+    }),
+  ]);
+
+  const merged = new Map<string, LighthouseUpload>();
+  for (const upload of uploadsFromLockups([...live, ...videos])) {
+    if (!merged.has(upload.youtubeId)) merged.set(upload.youtubeId, upload);
+  }
+  if (merged.size > 0) return Array.from(merged.values());
+
+  const fallbackIds = await scrapeLegacyVideoIds();
+  const fallback: LighthouseUpload[] = [];
+  for (const youtubeId of fallbackIds) {
+    const oembed = await fetchOembed(youtubeId);
+    const title = oembed?.title || 'Lighthouse Baptist Church Gathering';
+    fallback.push(...uploadsFromLockups([{ youtubeId, title, meta: '' }]));
+  }
+  return fallback;
+}
+
+async function scrapeLegacyVideoIds(): Promise<string[]> {
+  const [vidHtml, streamHtml, rssXml] = await Promise.all([
+    fetchUrl('https://www.youtube.com/@lighthousewinc/videos').catch(() => ''),
+    fetchUrl('https://www.youtube.com/@lighthousewinc/streams').catch(() => ''),
+    fetchUrl('https://www.youtube.com/feeds/videos.xml?channel_id=UC-rPauVwKrxsFn05cecsF-w').catch(() => ''),
+  ]);
+  const ids = [
+    ...vidHtml.matchAll(/"(?:videoId|contentId)":"([a-zA-Z0-9_-]{11})"/g),
+    ...streamHtml.matchAll(/"(?:videoId|contentId)":"([a-zA-Z0-9_-]{11})"/g),
+    ...rssXml.matchAll(/<yt:videoId>(.*?)<\/yt:videoId>/g),
+  ].map((match) => match[1]);
+  return Array.from(new Set(ids));
+}
+
+/**
+ * Sweeps Lighthouse Baptist Church (@lighthousewinc) videos and live worship
+ * services, inserting newly discovered messages into SQLite.
  */
 export async function syncLighthouseSermons(db: BibleStudyDB): Promise<SyncedVideoResult> {
   try {
     console.log('[LBC Sync] Starting sweep for Lighthouse Baptist Church (@lighthousewinc)...');
-
-    const [vidHtml, streamHtml, plHtml, rssXml] = await Promise.all([
-      fetchUrl('https://www.youtube.com/@lighthousewinc/videos').catch(() => ''),
-      fetchUrl('https://www.youtube.com/@lighthousewinc/streams').catch(() => ''),
-      fetchUrl('https://www.youtube.com/@lighthousewinc/playlists').catch(() => ''),
-      fetchUrl('https://www.youtube.com/feeds/videos.xml?channel_id=UC-rPauVwKrxsFn05cecsF-w').catch(() => ''),
-    ]);
-
-    const vIds = [...vidHtml.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map((x) => x[1]);
-    const sIds = [...streamHtml.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map((x) => x[1]);
-    const pIds = [...plHtml.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map((x) => x[1]);
-    const rIds = [...rssXml.matchAll(/<yt:videoId>(.*?)<\/yt:videoId>/g)].map((x) => x[1]);
-
-    const allCandidateIds = Array.from(new Set([...vIds, ...sIds, ...pIds, ...rIds]));
-    console.log(`[LBC Sync] Discovered ${allCandidateIds.length} candidate video/stream IDs from @lighthousewinc`);
+    const uploads = await fetchLighthouseUploads();
+    const worshipCount = uploads.filter((item) => item.isWorshipService).length;
+    console.log(`[LBC Sync] Discovered ${uploads.length} uploads (${worshipCount} Sunday/Wednesday services)`);
 
     let addedCount = 0;
     let existingCount = 0;
+    const sqlite = (db as any).db;
 
-    for (const ytId of allCandidateIds) {
-      // Check if already archived
-      const existing = (db as any).db
+    for (const upload of uploads) {
+      const existing = sqlite
         .prepare('SELECT id FROM sermons_podcasts WHERE mediaUrl LIKE ? OR id = ?')
-        .get(`%${ytId}%`, `yt-${ytId}`);
+        .get(`%${upload.youtubeId}%`, `yt-${upload.youtubeId}`) as { id: string } | undefined;
 
       if (existing) {
+        if (upload.isWorshipService) {
+          sqlite
+            .prepare(
+              `UPDATE sermons_podcasts
+               SET title = ?, speaker = ?, series = ?, description = ?, dateRecorded = ?, seriesPart = ?, updatedAt = ?
+               WHERE id = ?`
+            )
+            .run(
+              upload.title,
+              upload.speaker,
+              upload.series,
+              upload.description,
+              upload.publishedAt,
+              upload.seriesPart,
+              new Date().toISOString(),
+              existing.id
+            );
+        }
         existingCount++;
         continue;
       }
 
-      const oembed = await fetchOembed(ytId);
-      const rawTitle = oembed?.title || 'Lighthouse Baptist Church Gathering';
-      let title = rawTitle;
-      let speaker = 'Pastor Luke Shope';
-
-      if (/given by (pastor luke shope)/i.test(rawTitle)) {
-        speaker = 'Pastor Luke Shope';
-        title = rawTitle.replace(/\s*\|\s*given by pastor luke shope/i, '').trim();
-      } else if (/given by (mr\.?\s*aaron miller)/i.test(rawTitle)) {
-        speaker = 'Mr. Aaron Miller';
-        title = rawTitle.replace(/\s*\|\s*given by mr\.?\s*aaron miller/i, '').trim();
-      } else if (/given by (steve ludwig)/i.test(rawTitle)) {
-        speaker = 'Steve Ludwig';
-        title = rawTitle.replace(/\s*\|\s*given by steve ludwig/i, '').trim();
-      } else if (/given by (howard caldwell)/i.test(rawTitle)) {
-        speaker = 'Howard Caldwell';
-        title = rawTitle.replace(/\s*\|\s*given by howard caldwell/i, '').trim();
-      } else if (/given by (gregory miller)/i.test(rawTitle)) {
-        speaker = 'Gregory Miller';
-        title = rawTitle.replace(/\s*\|\s*given by gregory miller/i, '').trim();
-      } else if (/given by (assistant pastor james caldwell)/i.test(rawTitle)) {
-        speaker = 'Assistant Pastor James Caldwell';
-        title = rawTitle.replace(/\s*\|\s*given by assistant pastor james caldwell/i, '').trim();
-      }
-
-      // Series extraction
-      let series = 'Sunday Sanctuary Expositions';
-      let seriesPart = 1;
-      const partMatch = title.match(/part\s*(\d+)/i) || title.match(/pt\.?\s*(\d+)/i);
-      if (partMatch) {
-        seriesPart = parseInt(partMatch[1], 10);
-        series =
-          title.split(/part\s*\d+|pt\.?\s*\d+/i)[0].replace(/[-|:]$/, '').trim() ||
-          'Sunday Sanctuary Expositions';
-      }
-
-      const sermonId = `yt-${ytId}`;
-      const mediaUrl = `https://www.youtube.com/watch?v=${ytId}`;
-      const thumbUrl = `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`;
       const now = new Date().toISOString();
-
-      (db as any).db
-        .prepare(`
-        INSERT INTO sermons_podcasts (
-          id, title, speaker, series, channel, seriesPart, description, mediaType, mediaUrl, thumbnailUrl, dateRecorded, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
+      sqlite
+        .prepare(
+          `INSERT INTO sermons_podcasts (
+            id, title, speaker, series, channel, seriesPart, description, mediaType, mediaUrl, thumbnailUrl, dateRecorded, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
         .run(
-          sermonId,
-          title,
-          speaker,
-          series,
+          `yt-${upload.youtubeId}`,
+          upload.title,
+          upload.speaker,
+          upload.series,
           'Lighthouse Baptist Church',
-          seriesPart,
-          `Expository sermon from Lighthouse Baptist Church • Winchester, VA. Preached by ${speaker}.`,
+          upload.seriesPart,
+          upload.description,
           'video',
-          mediaUrl,
-          thumbUrl,
-          now,
+          `https://www.youtube.com/watch?v=${upload.youtubeId}`,
+          `https://i.ytimg.com/vi/${upload.youtubeId}/hqdefault.jpg`,
+          upload.publishedAt,
           now,
           now
         );
 
       addedCount++;
-      console.log(`[LBC Sync] + Added new sermon: "${title}" by ${speaker} (yt: ${ytId})`);
+      console.log(`[LBC Sync] + Added: "${upload.title}" [${upload.series}] (${upload.youtubeId})`);
     }
 
-    const totalNow = (db as any).db.prepare('SELECT count(*) as c FROM sermons_podcasts').get().c;
+    const totalNow = sqlite.prepare('SELECT count(*) as c FROM sermons_podcasts').get().c;
     console.log(
-      `[LBC Sync] Sweep completed! Added: ${addedCount}, Existing: ${existingCount}, Total in archive: ${totalNow}`
+      `[LBC Sync] Sweep completed! Added: ${addedCount}, Existing: ${existingCount}, Worship services: ${worshipCount}, Total: ${totalNow}`
     );
 
-    return { addedCount, existingCount, totalNow };
+    return { addedCount, existingCount, worshipCount, totalNow };
   } catch (err: any) {
     console.error('[LBC Sync] Error during sweep:', err);
     const totalNow = (db as any).db.prepare('SELECT count(*) as c FROM sermons_podcasts').get()?.c || 0;
-    return { addedCount: 0, existingCount: 0, totalNow };
+    return { addedCount: 0, existingCount: 0, worshipCount: 0, totalNow };
   }
 }
 
 /**
- * Initializes the automated 3x daily scheduler for Lighthouse Baptist Church.
- * Executes on startup, then runs every 6 hours (covering Morning, Midday, Afternoon/Evening)
- * so that new church services are pulled in promptly throughout the day.
+ * Pulls new Sunday and Wednesday services through the day.
+ * The channel uploads gatherings several times on those days, so the sweep
+ * runs every 2 hours instead of waiting on a single daily pass.
  */
 export function startLighthouseDailyScheduler(db: BibleStudyDB): void {
-  // 1. Initial sweep on server boot
   syncLighthouseSermons(db).catch((e) => console.error('[LBC Scheduler] Boot sync failed:', e));
 
-  // 2. Schedule 3x daily sweep: Every 6 hours = 4 sweeps per day (Morning ~6am, Midday ~12pm, Afternoon ~6pm, Night ~12am)
-  const SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  const SWEEP_INTERVAL_MS = 2 * 60 * 60 * 1000;
   setInterval(() => {
-    console.log('[LBC Scheduler] Running scheduled 3x-daily sweep for Lighthouse Baptist Church...');
+    console.log('[LBC Scheduler] Sweeping Lighthouse Baptist Church for new Sunday and Wednesday services...');
     syncLighthouseSermons(db).catch((e) => console.error('[LBC Scheduler] Scheduled sweep failed:', e));
   }, SWEEP_INTERVAL_MS);
 
-  console.log('[LBC Scheduler] 3x daily automated sweep initialized for @lighthousewinc.');
+  console.log('[LBC Scheduler] 2-hour worship sweep initialized for @lighthousewinc.');
 }
