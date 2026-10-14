@@ -32,25 +32,55 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass through non-GET and API requests directly to network
-  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
+  // Pass through non-GET and API/WebSocket requests directly to network
+  if (event.request.method !== 'GET') return;
+  const url = event.request.url || '';
+  if (!url.startsWith('http')) return;
+
+  // Never intercept API routes, WebSockets, or Range requests (media streaming)
+  if (
+    url.includes('/api/') ||
+    url.includes('/ws') ||
+    url.includes('/socket') ||
+    url.includes('/uploads/') ||
+    url.includes('/courses/') ||
+    event.request.headers.get('range') ||
+    url.match(/\.(mp4|webm|mp3|wav|m4a|ogg|mov)(\?.*)?$/i)
+  ) {
     return;
   }
 
-  
-  if (!event.request.url.startsWith("http")) {
+  // Only handle same-origin static requests
+  const urlObj = new URL(url);
+  if (urlObj.origin !== self.location.origin) {
     return;
   }
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cache successful static responses
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+        // Only cache successful small basic static responses (JS/CSS/SVG/PNG/fonts)
+        if (
+          response &&
+          response.status === 200 &&
+          response.type === 'basic' &&
+          !response.headers.get('content-range')
+        ) {
+          const contentType = response.headers.get('content-type') || '';
+          const isStatic =
+            contentType.includes('text/css') ||
+            contentType.includes('javascript') ||
+            contentType.includes('image/') ||
+            contentType.includes('font/');
+
+          if (isStatic) {
+            try {
+              const responseToCache = response.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache).catch(() => {});
+              }).catch(() => {});
+            } catch {}
+          }
         }
         return response;
       })

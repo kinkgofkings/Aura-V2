@@ -497,16 +497,77 @@ export class RecoveryService {
 
   // --- USER PRINCIPLES PROGRESS ---
   getUserPrinciples(userId: string): Record<number, UserPrincipleProgress> {
-    return this.state.userPrinciples[userId] || {};
+    const rawId = String(userId || '').trim();
+    if (!rawId) return {};
+
+    const existing = this.state.userPrinciples[rawId];
+    if (existing && Object.keys(existing).length > 0) {
+      return existing;
+    }
+
+    // Check aliases if user is Tex
+    const cleanId = rawId.toLowerCase();
+    if (
+      cleanId.includes('tex') ||
+      cleanId.includes('lightsouttattoo') ||
+      cleanId === 'rvnvhgdintwcfdzy9lzpkfsabgz1'
+    ) {
+      const texAliases = ['user_tex', 'rvnvHGDInTWcFdzy9LZpKFsabgz1', 'tex', 'lightsouttattootex@gmail.com'];
+      for (const alias of texAliases) {
+        if (this.state.userPrinciples[alias] && Object.keys(this.state.userPrinciples[alias]).length > 0) {
+          return this.state.userPrinciples[alias];
+        }
+      }
+    }
+
+    // Check guest_local if nothing found for current user
+    if (this.state.userPrinciples['guest_local'] && Object.keys(this.state.userPrinciples['guest_local']).length > 0) {
+      return this.state.userPrinciples['guest_local'];
+    }
+
+    return {};
   }
 
   saveUserPrinciple(userId: string, progress: UserPrincipleProgress) {
-    if (!this.state.userPrinciples[userId]) {
-      this.state.userPrinciples[userId] = {};
+    const rawId = String(userId || 'guest_local').trim();
+    if (!this.state.userPrinciples[rawId]) {
+      this.state.userPrinciples[rawId] = {};
     }
-    this.state.userPrinciples[userId][progress.step] = progress;
+
+    const stepNum = Number(progress.step) || 1;
+    const isCompleted = Boolean(progress.isCompleted || progress.actionCommitted);
+    const actionCommitted = Boolean(progress.actionCommitted);
+
+    const sanitizedProgress: UserPrincipleProgress = {
+      ...progress,
+      step: stepNum,
+      isCompleted,
+      actionCommitted,
+      completedAt: isCompleted ? (progress.completedAt || new Date().toISOString()) : undefined,
+      userNotes: typeof progress.userNotes === 'string' ? progress.userNotes : ''
+    };
+
+    this.state.userPrinciples[rawId][stepNum] = sanitizedProgress;
+
+    // Cross-sync to Tex aliases if Tex is logged in
+    const cleanId = rawId.toLowerCase();
+    if (
+      cleanId.includes('tex') ||
+      cleanId.includes('lightsouttattoo') ||
+      cleanId === 'rvnvhgdintwcfdzy9lzpkfsabgz1'
+    ) {
+      const texAliases = ['user_tex', 'rvnvHGDInTWcFdzy9LZpKFsabgz1', 'tex', 'lightsouttattootex@gmail.com'];
+      for (const alias of texAliases) {
+        if (!this.state.userPrinciples[alias]) {
+          this.state.userPrinciples[alias] = {};
+        }
+        this.state.userPrinciples[alias][stepNum] = sanitizedProgress;
+      }
+    }
+
     this.saveState();
-    return this.state.userPrinciples[userId];
+    console.log(`[RecoveryService] Saved step ${stepNum} progress for user "${rawId}": completed=${isCompleted}, committed=${actionCommitted}`);
+    return this.state.userPrinciples[rawId];
   }
 
   // --- RECOVERY JOURNAL & STREAK ---

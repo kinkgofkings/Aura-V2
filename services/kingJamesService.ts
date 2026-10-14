@@ -277,14 +277,19 @@ Return a JSON object with:
 - dailyApplication: array of 3-4 specific practical applications
 - prayer: a heartfelt closing prayer`;
 
-        const res = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            systemInstruction: MASTER_SYSTEM_PROMPT,
-          }
-        });
+        const res = await Promise.race([
+          ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              systemInstruction: MASTER_SYSTEM_PROMPT,
+            }
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('AI breakdown request timed out')), 4000)
+          )
+        ]);
 
         const parsed = JSON.parse(res.text || '{}');
         if (parsed && parsed.historicalContext && parsed.dailyApplication) {

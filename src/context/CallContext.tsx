@@ -367,7 +367,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     checkIncomingCalls();
-    callPollIntervalRef.current = setInterval(checkIncomingCalls, 1500);
+    callPollIntervalRef.current = setInterval(checkIncomingCalls, 5000);
 
     return () => {
       isMounted = false;

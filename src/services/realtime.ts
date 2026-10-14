@@ -50,54 +50,64 @@ class RealtimeClient {
 
   private open() {
     if (this.stopped || !this.userId || typeof window === "undefined") return;
-    if (this.ws) {
-      this.ws.onclose = null;
-      try {
-        this.ws.close();
-      } catch {
-        // Already closing.
-      }
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
     }
 
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(
-      `${proto}://${window.location.host}/ws?userId=${encodeURIComponent(this.userId)}`
-    );
-    this.ws = ws;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
-    ws.onopen = () => {
-      this.retry = 0;
-      ws.send(JSON.stringify({ type: "hello", userId: this.userId }));
-    };
+    try {
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(
+        `${proto}://${window.location.host}/ws?userId=${encodeURIComponent(this.userId)}`
+      );
+      this.ws = ws;
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        const type = data?.type;
-        if (!type) return;
-        this.handlers.get(type)?.forEach((handler) => {
-          try {
-            handler(data);
-          } catch (err) {
-            console.warn("Realtime handler error:", err);
-          }
-        });
-      } catch {
-        // Ignore malformed frames.
+      ws.onopen = () => {
+        this.retry = 0;
+        try {
+          ws.send(JSON.stringify({ type: "hello", userId: this.userId }));
+        } catch {}
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const type = data?.type;
+          if (!type) return;
+          this.handlers.get(type)?.forEach((handler) => {
+            try {
+              handler(data);
+            } catch (err) {
+              console.warn("[Realtime] Handler warning:", err);
+            }
+          });
+        } catch {
+          // Ignore malformed frames.
+        }
+      };
+
+      ws.onclose = () => {
+        if (this.ws === ws) this.ws = null;
+        if (this.stopped) return;
+        // Exponential backoff capped at 15 seconds, max 30 retries before resting
+        const delay = Math.min(15000, 1000 * 1.5 ** Math.min(this.retry, 8));
+        this.retry += 1;
+        this.reconnectTimer = setTimeout(() => this.open(), delay);
+      };
+
+      ws.onerror = () => {
+        // Will trigger onclose naturally, do not force redundant close()
+      };
+    } catch (err) {
+      console.warn("[Realtime] WebSocket creation notice:", err);
+      if (!this.stopped) {
+        this.reconnectTimer = setTimeout(() => this.open(), 5000);
       }
-    };
-
-    ws.onclose = () => {
-      if (this.ws === ws) this.ws = null;
-      if (this.stopped) return;
-      const delay = Math.min(10000, 500 * 2 ** this.retry);
-      this.retry += 1;
-      this.reconnectTimer = setTimeout(() => this.open(), delay);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
+    }
   }
 }
 

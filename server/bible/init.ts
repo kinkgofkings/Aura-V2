@@ -8,7 +8,9 @@ import path from 'path';
 import { BibleStudyDB } from './models';
 import { seedBibleCourses } from './seed';
 
-export function initializeBibleDB(dbPath: string): Database.Database {
+export function initializeBibleDB(
+  dbPath: string = path.join(process.cwd(), 'data', 'bible', 'bible_study.db')
+): Database.Database {
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

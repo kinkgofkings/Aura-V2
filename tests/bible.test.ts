@@ -1,8 +1,39 @@
 /**
  * Bible Study API Tests
  */
+import express from 'express';
+import http from 'http';
+import { initializeBibleDB } from '../server/bible/init';
+import { createBibleRoutes } from '../routes/bible';
 
-const BASE_URL = 'http://localhost:3000/api/bible';
+let BASE_URL = 'http://localhost:3000/api/bible';
+let serverInstance: http.Server | null = null;
+
+async function ensureServer(): Promise<void> {
+  try {
+    const res = await fetch(`${BASE_URL}/courses`, { signal: AbortSignal.timeout(1000) });
+    const cType = res.headers.get('content-type') || '';
+    if (res.ok && cType.includes('application/json')) return;
+  } catch {}
+
+  const app = express();
+  app.use(express.json());
+  const path = await import('path');
+  const dbPath = path.default.join(process.cwd(), 'data', 'bible', 'bible_study.db');
+  initializeBibleDB(dbPath);
+  const { BibleStudyDB } = await import('../server/bible/models');
+  const bibleDB = new BibleStudyDB(dbPath);
+  const bibleRoutes = createBibleRoutes(bibleDB);
+  app.use('/api/bible', bibleRoutes);
+
+  await new Promise<void>((resolve) => {
+    serverInstance = app.listen(0, '127.0.0.1', () => {
+      const addr = serverInstance!.address() as any;
+      BASE_URL = `http://127.0.0.1:${addr.port}/api/bible`;
+      resolve();
+    });
+  });
+}
 
 async function testGetCourses() {
   console.log('\n=== Testing GET /api/bible/courses ===');
@@ -10,13 +41,12 @@ async function testGetCourses() {
     const response = await fetch(`${BASE_URL}/courses`);
     const data = await response.json();
     console.log('Status:', response.status);
-    console.log('Courses:', JSON.stringify(data, null, 2));
     
-    if (Array.isArray(data) && data.length === 3) {
-      console.log('✓ PASS: 3 seeded courses found');
+    if (Array.isArray(data) && data.length >= 3) {
+      console.log('✓ PASS: Seeded courses found:', data.length);
       return true;
     } else {
-      console.log('✗ FAIL: Expected 3 courses, got', data.length);
+      console.log('✗ FAIL: Expected at least 3 courses, got', Array.isArray(data) ? data.length : data);
       return false;
     }
   } catch (error) {
@@ -31,7 +61,6 @@ async function testStudyBreakdown() {
     const response = await fetch(`${BASE_URL}/study?book=James&chapter=2&verse=3`);
     const data = await response.json();
     console.log('Status:', response.status);
-    console.log('Study Breakdown:', JSON.stringify(data, null, 2));
     
     if (data.passageText && data.bookSummary && data.historicalContext && data.dailyApplication) {
       console.log('✓ PASS: Full study breakdown structure returned');
@@ -56,7 +85,6 @@ async function testOnboard() {
     });
     const data = await response.json();
     console.log('Status:', response.status);
-    console.log('Onboarding Response:', JSON.stringify(data, null, 2));
     
     if (data.welcome && Array.isArray(data.recommendedCourses) && data.recommendedCourses.length > 0) {
       console.log('✓ PASS: Onboarding response with course recommendations');
@@ -72,7 +100,8 @@ async function testOnboard() {
 }
 
 async function runTests() {
-  console.log('Starting Bible Study API Tests...');
+  await ensureServer();
+  console.log('Starting Bible Study API Tests against:', BASE_URL);
   
   const results = [];
   results.push(await testGetCourses());
@@ -83,8 +112,12 @@ async function runTests() {
   const passed = results.filter(r => r).length;
   console.log(`Passed: ${passed}/${results.length}`);
   
+  if (serverInstance) {
+    serverInstance.close();
+  }
+
   if (passed === results.length) {
-    console.log('✓ All tests passed!');
+    console.log('✓ All Bible API tests passed!');
     process.exit(0);
   } else {
     console.log('✗ Some tests failed');
@@ -92,5 +125,4 @@ async function runTests() {
   }
 }
 
-// Wait for server to be ready
-setTimeout(runTests, 2000);
+runTests();

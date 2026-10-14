@@ -282,144 +282,138 @@ export const AuraLiveWallpaper: React.FC = () => {
     let time = 0;
 
     const render = () => {
-      if (!isVisibleRef.current) {
+      if (!isVisibleRef.current || (typeof document !== 'undefined' && document.hidden)) {
         animFrameId.current = requestAnimationFrame(render);
         return;
       }
 
-      time += 0.015;
-      ctx.clearRect(0, 0, width, height);
+      try {
+        time += 0.015;
+        ctx.clearRect(0, 0, width, height);
 
-      // 1. Draw Subtle Multi-Color Ambient Aura Radiance Blobs
-      const primaryColor = colors[0];
-      const secondaryColor = colors[1] || colors[0];
-      const tertiaryColor = colors[2] || colors[0];
+        // 1. Draw Subtle Multi-Color Ambient Aura Radiance Blobs
+        const primaryColor = colors[0];
+        const secondaryColor = colors[1] || colors[0];
+        const tertiaryColor = colors[2] || colors[0];
 
-      // Top-left pulsing aura wave
-      const grad1 = ctx.createRadialGradient(
-        width * 0.15 + Math.sin(time * 0.6) * 40,
-        height * 0.15 + Math.cos(time * 0.5) * 40,
-        0,
-        width * 0.15,
-        height * 0.15,
-        width * 0.45
-      );
-      grad1.addColorStop(0, `${primaryColor}22`);
-      grad1.addColorStop(0.5, `${primaryColor}0a`);
-      grad1.addColorStop(1, 'transparent');
-      ctx.fillStyle = grad1;
-      ctx.fillRect(0, 0, width, height);
+        // Top-left pulsing aura wave
+        const grad1 = ctx.createRadialGradient(
+          width * 0.15 + Math.sin(time * 0.6) * 40,
+          height * 0.15 + Math.cos(time * 0.5) * 40,
+          0,
+          width * 0.15,
+          height * 0.15,
+          width * 0.45
+        );
+        grad1.addColorStop(0, `${primaryColor}22`);
+        grad1.addColorStop(0.5, `${primaryColor}0a`);
+        grad1.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad1;
+        ctx.fillRect(0, 0, width, height);
 
-      // Bottom-right breathing warmth
-      const grad2 = ctx.createRadialGradient(
-        width * 0.85 + Math.cos(time * 0.7) * 45,
-        height * 0.8 + Math.sin(time * 0.4) * 45,
-        0,
-        width * 0.85,
-        height * 0.8,
-        width * 0.48
-      );
-      grad2.addColorStop(0, `${secondaryColor}1e`);
-      grad2.addColorStop(0.6, `${secondaryColor}08`);
-      grad2.addColorStop(1, 'transparent');
-      ctx.fillStyle = grad2;
-      ctx.fillRect(0, 0, width, height);
+        // Bottom-right breathing warmth
+        const grad2 = ctx.createRadialGradient(
+          width * 0.85 + Math.cos(time * 0.7) * 45,
+          height * 0.8 + Math.sin(time * 0.4) * 45,
+          0,
+          width * 0.85,
+          height * 0.8,
+          width * 0.48
+        );
+        grad2.addColorStop(0, `${secondaryColor}1e`);
+        grad2.addColorStop(0.6, `${secondaryColor}08`);
+        grad2.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad2;
+        ctx.fillRect(0, 0, width, height);
 
-      // Center subtle resonance glow
-      const grad3 = ctx.createRadialGradient(
-        width * 0.5 + Math.sin(time * 0.3) * 30,
-        height * 0.5 + Math.cos(time * 0.3) * 30,
-        0,
-        width * 0.5,
-        height * 0.5,
-        width * 0.35
-      );
-      grad3.addColorStop(0, `${tertiaryColor}15`);
-      grad3.addColorStop(1, 'transparent');
-      ctx.fillStyle = grad3;
-      ctx.fillRect(0, 0, width, height);
+        // Center subtle resonance glow
+        const grad3 = ctx.createRadialGradient(
+          width * 0.5 + Math.sin(time * 0.3) * 30,
+          height * 0.5 + Math.cos(time * 0.3) * 30,
+          0,
+          width * 0.5,
+          height * 0.5,
+          width * 0.35
+        );
+        grad3.addColorStop(0, `${tertiaryColor}15`);
+        grad3.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad3;
+        ctx.fillRect(0, 0, width, height);
 
-      // 2. Draw Floating Stardust / Aura Particles
-      const particles = particlesRef.current;
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
+        // 2. Draw Floating Stardust / Aura Particles (Optimized, no shadowBlur in loop)
+        const particles = particlesRef.current;
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
 
-        // Animate position
-        p.x += p.vx;
-        p.y += p.vy;
+          // Animate position
+          p.x += p.vx;
+          p.y += p.vy;
 
-        // Wrap around
-        if (p.y < -10) {
-          p.y = height + 10;
-          p.x = Math.random() * width;
-        }
-        if (p.x < -10) p.x = width + 10;
-        if (p.x > width + 10) p.x = -10;
+          // Wrap around
+          if (p.y < -10) {
+            p.y = height + 10;
+            p.x = Math.random() * width;
+          }
+          if (p.x < -10) p.x = width + 10;
+          if (p.x > width + 10) p.x = -10;
 
-        // Pulse alpha
-        const pulse = Math.sin(time * 2 + p.pulseOffset);
-        const currentAlpha = Math.max(0.05, p.alpha + pulse * 0.15);
+          // Pulse alpha
+          const pulse = Math.sin(time * 2 + p.pulseOffset);
+          const currentAlpha = Math.max(0.05, p.alpha + pulse * 0.15);
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = currentAlpha;
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 6;
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // 3. Draw Expanding Energy Rings (Shockwaves from Word / Community bursts)
-      const rings = ringsRef.current;
-      for (let i = rings.length - 1; i >= 0; i--) {
-        const r = rings[i];
-        r.radius += r.speed;
-        r.alpha *= 0.94; // Fade out
-
-        if (r.radius >= r.maxRadius || r.alpha <= 0.01) {
-          rings.splice(i, 1);
-          continue;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = currentAlpha;
+          ctx.fill();
         }
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = r.color;
-        ctx.lineWidth = r.lineWidth;
-        ctx.globalAlpha = r.alpha;
-        ctx.shadowColor = r.color;
-        ctx.shadowBlur = 12;
-        ctx.stroke();
-        ctx.restore();
-      }
+        // 3. Draw Expanding Energy Rings (Shockwaves from Word / Community bursts)
+        const rings = ringsRef.current;
+        for (let i = rings.length - 1; i >= 0; i--) {
+          const r = rings[i];
+          r.radius += r.speed;
+          r.alpha *= 0.94; // Fade out
 
-      // 4. Draw Burst Spark Particles
-      const sparks = sparksRef.current;
-      for (let i = sparks.length - 1; i >= 0; i--) {
-        const s = sparks[i];
-        s.x += s.vx;
-        s.y += s.vy;
-        s.vx *= 0.95; // drag
-        s.vy *= 0.95;
-        s.life++;
+          if (r.radius >= r.maxRadius || r.alpha <= 0.01) {
+            rings.splice(i, 1);
+            continue;
+          }
 
-        const lifeRatio = 1 - s.life / s.maxLife;
-        if (lifeRatio <= 0) {
-          sparks.splice(i, 1);
-          continue;
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = r.color;
+          ctx.lineWidth = r.lineWidth;
+          ctx.globalAlpha = r.alpha;
+          ctx.stroke();
         }
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.size * lifeRatio, 0, Math.PI * 2);
-        ctx.fillStyle = s.color;
-        ctx.globalAlpha = lifeRatio * 0.9;
-        ctx.shadowColor = s.color;
-        ctx.shadowBlur = 8;
-        ctx.fill();
-        ctx.restore();
+        // 4. Draw Burst Spark Particles (Clean GPU-friendly fills)
+        const sparks = sparksRef.current;
+        for (let i = sparks.length - 1; i >= 0; i--) {
+          const s = sparks[i];
+          s.x += s.vx;
+          s.y += s.vy;
+          s.vx *= 0.95; // drag
+          s.vy *= 0.95;
+          s.life++;
+
+          const lifeRatio = 1 - s.life / s.maxLife;
+          if (lifeRatio <= 0) {
+            sparks.splice(i, 1);
+            continue;
+          }
+
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.size * lifeRatio, 0, Math.PI * 2);
+          ctx.fillStyle = s.color;
+          ctx.globalAlpha = lifeRatio * 0.9;
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = 1.0;
+      } catch (e) {
+        console.warn('[Aura Wallpaper] Render loop caught exception:', e);
       }
 
       animFrameId.current = requestAnimationFrame(render);

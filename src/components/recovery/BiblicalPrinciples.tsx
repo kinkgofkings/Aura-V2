@@ -17,6 +17,8 @@ import { RecoveryPrinciple, UserPrincipleProgress } from '../../types/recovery';
 import { useAuth } from '../../context/AuthContext';
 import { soundEffects } from '../../services/audio';
 
+import confetti from 'canvas-confetti';
+
 export const BiblicalPrinciples: React.FC = () => {
   const { user } = useAuth();
   const userId = user?.id || 'guest_local';
@@ -42,27 +44,74 @@ export const BiblicalPrinciples: React.FC = () => {
       }, 500);
     }
   }, []);
-  const [progressMap, setProgressMap] = useState<Record<number, UserPrincipleProgress>>({});
-  const [activeNotes, setActiveNotes] = useState<Record<number, string>>({});
+
+  // Initialize progress from localStorage immediately for 0-latency display
+  const [progressMap, setProgressMap] = useState<Record<number, UserPrincipleProgress>>(() => {
+    try {
+      const saved =
+        localStorage.getItem(`aura_principles_${userId}`) ||
+        localStorage.getItem('aura_principles_user_tex') ||
+        localStorage.getItem('aura_principles_local');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {};
+  });
+
+  const [activeNotes, setActiveNotes] = useState<Record<number, string>>(() => {
+    try {
+      const saved =
+        localStorage.getItem(`aura_principles_${userId}`) ||
+        localStorage.getItem('aura_principles_user_tex') ||
+        localStorage.getItem('aura_principles_local');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const notes: Record<number, string> = {};
+        Object.entries(parsed).forEach(([step, prog]: [string, any]) => {
+          if (prog?.userNotes) notes[Number(step)] = prog.userNotes;
+        });
+        return notes;
+      }
+    } catch {}
+    return {};
+  });
+
   const [isSaving, setIsSaving] = useState<number | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<number | null>(null);
   const [playingStep, setPlayingStep] = useState<number | null>(null);
 
-  // Load user progress
+  // Sync user progress from backend API
   useEffect(() => {
-    fetch(`/api/recovery/user-principles/${userId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.progress) {
-          setProgressMap(data.progress);
-          const initialNotes: Record<number, string> = {};
-          Object.entries(data.progress).forEach(([step, prog]: [string, any]) => {
-            initialNotes[Number(step)] = prog.userNotes || '';
-          });
-          setActiveNotes(initialNotes);
+    const fetchProgress = async () => {
+      try {
+        const res = await fetch(`/api/recovery/user-principles/${encodeURIComponent(userId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.progress && Object.keys(data.progress).length > 0) {
+            setProgressMap(prev => {
+              const merged = { ...prev, ...data.progress };
+              try {
+                localStorage.setItem(`aura_principles_${userId}`, JSON.stringify(merged));
+                localStorage.setItem('aura_principles_local', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+            setActiveNotes(prev => {
+              const updatedNotes = { ...prev };
+              Object.entries(data.progress).forEach(([step, prog]: [string, any]) => {
+                if (prog?.userNotes && !updatedNotes[Number(step)]) {
+                  updatedNotes[Number(step)] = prog.userNotes;
+                }
+              });
+              return updatedNotes;
+            });
+          }
         }
-      })
-      .catch(console.error);
+      } catch (err) {
+        console.warn('[Recovery] Principle progress fetch notice:', err);
+      }
+    };
+
+    fetchProgress();
   }, [userId]);
 
   const toggleExpand = (step: number) => {
@@ -70,8 +119,18 @@ export const BiblicalPrinciples: React.FC = () => {
     setExpandedStep(expandedStep === step ? null : step);
   };
 
-  const handleToggleCompleted = (step: number) => {
-    soundEffects.playSuccess();
+  const fireStepCelebration = () => {
+    try {
+      confetti({
+        particleCount: 45,
+        spread: 60,
+        origin: { y: 0.75 },
+        colors: ['#f59e0b', '#10b981', '#3b82f6', '#fbbf24']
+      });
+    } catch {}
+  };
+
+  const handleToggleCompleted = async (step: number) => {
     const current = progressMap[step] || {
       step,
       isCompleted: false,
@@ -79,18 +138,27 @@ export const BiblicalPrinciples: React.FC = () => {
       actionCommitted: false
     };
 
+    const nextCompleted = !current.isCompleted;
+    if (nextCompleted) {
+      soundEffects.playSuccess();
+      fireStepCelebration();
+    } else {
+      soundEffects.playTap();
+    }
+
     const updated: UserPrincipleProgress = {
       ...current,
-      isCompleted: !current.isCompleted,
-      completedAt: !current.isCompleted ? new Date().toISOString() : undefined,
-      userNotes: activeNotes[step] || current.userNotes || ''
+      step,
+      isCompleted: nextCompleted,
+      actionCommitted: nextCompleted ? true : current.actionCommitted,
+      completedAt: nextCompleted ? (current.completedAt || new Date().toISOString()) : undefined,
+      userNotes: activeNotes[step] ?? current.userNotes ?? ''
     };
 
-    saveProgressToBackend(step, updated);
+    await saveProgressToBackend(step, updated);
   };
 
-  const handleToggleActionCommitted = (step: number) => {
-    soundEffects.playTap();
+  const handleToggleActionCommitted = async (step: number) => {
     const current = progressMap[step] || {
       step,
       isCompleted: false,
@@ -98,15 +166,27 @@ export const BiblicalPrinciples: React.FC = () => {
       actionCommitted: false
     };
 
+    const nextActionState = !current.actionCommitted;
+    if (nextActionState) {
+      soundEffects.playSuccess();
+      fireStepCelebration();
+    } else {
+      soundEffects.playTap();
+    }
+
     const updated: UserPrincipleProgress = {
       ...current,
-      actionCommitted: !current.actionCommitted
+      step,
+      actionCommitted: nextActionState,
+      isCompleted: nextActionState ? true : current.isCompleted,
+      completedAt: nextActionState ? (current.completedAt || new Date().toISOString()) : (current.isCompleted ? current.completedAt : undefined),
+      userNotes: activeNotes[step] ?? current.userNotes ?? ''
     };
 
-    saveProgressToBackend(step, updated);
+    await saveProgressToBackend(step, updated);
   };
 
-  const handleSaveNotes = (step: number) => {
+  const handleSaveNotes = async (step: number) => {
     soundEffects.playTap();
     setIsSaving(step);
     const current = progressMap[step] || {
@@ -116,28 +196,63 @@ export const BiblicalPrinciples: React.FC = () => {
       actionCommitted: false
     };
 
+    const noteText = activeNotes[step] ?? current.userNotes ?? '';
+    // If the user committed or wrote personal notes, mark completed and record status
+    const shouldComplete = Boolean(current.isCompleted || current.actionCommitted || noteText.trim().length > 0);
+
     const updated: UserPrincipleProgress = {
       ...current,
-      userNotes: activeNotes[step] || ''
+      step,
+      userNotes: noteText,
+      isCompleted: shouldComplete,
+      actionCommitted: current.actionCommitted || shouldComplete,
+      completedAt: shouldComplete ? (current.completedAt || new Date().toISOString()) : undefined
     };
 
-    saveProgressToBackend(step, updated).then(() => {
-      setIsSaving(null);
-      setSaveSuccess(step);
-      setTimeout(() => setSaveSuccess(null), 2500);
-    });
+    await saveProgressToBackend(step, updated);
+    setIsSaving(null);
+    setSaveSuccess(step);
+    if (shouldComplete && !current.isCompleted) {
+      fireStepCelebration();
+    }
+    setTimeout(() => setSaveSuccess(null), 3000);
   };
 
   const saveProgressToBackend = async (step: number, progress: UserPrincipleProgress) => {
-    setProgressMap(prev => ({ ...prev, [step]: progress }));
+    // 1. Immediately update UI state
+    setProgressMap(prev => {
+      const nextMap = { ...prev, [step]: progress };
+      // 2. Immediate localStorage backup (persists across reloads & offline)
+      try {
+        localStorage.setItem(`aura_principles_${userId}`, JSON.stringify(nextMap));
+        localStorage.setItem('aura_principles_local', JSON.stringify(nextMap));
+        if (userId.includes('tex') || userId.includes('lightsouttattoo')) {
+          localStorage.setItem('aura_principles_user_tex', JSON.stringify(nextMap));
+        }
+      } catch (e) {
+        console.warn('LocalStorage save warning:', e);
+      }
+      return nextMap;
+    });
+
+    // 3. Post to backend server to update database permanently
     try {
-      await fetch(`/api/recovery/user-principles/${userId}`, {
+      const res = await fetch(`/api/recovery/user-principles/${encodeURIComponent(userId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(progress)
       });
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[Recovery] Saved Step ${step} progress to database for user "${userId}":`, data);
+        if (data.progress) {
+          setProgressMap(data.progress);
+        }
+      } else {
+        console.warn(`[Recovery] Server returned ${res.status} when saving Step ${step}`);
+      }
     } catch (err) {
-      console.error('Failed to save principle progress:', err);
+      console.error('[Recovery] Failed to save principle progress to server:', err);
     }
   };
 
@@ -184,8 +299,9 @@ export const BiblicalPrinciples: React.FC = () => {
     window.speechSynthesis.speak(utterance);
   };
 
-  // Compute completed count
-  const completedCount = Object.values(progressMap).filter(p => p.isCompleted).length;
+  // Step is marked completed if user checked completion or committed to action step
+  const isStepCompleted = (p?: UserPrincipleProgress) => Boolean(p && (p.isCompleted || p.actionCommitted));
+  const completedCount = Object.values(progressMap).filter(isStepCompleted).length;
   const percentage = Math.round((completedCount / 10) * 100);
 
   return (
@@ -240,8 +356,8 @@ export const BiblicalPrinciples: React.FC = () => {
         {CORE_BIBLICAL_RECOVERY_PRINCIPLES.map(principle => {
           const isExpanded = expandedStep === principle.step;
           const prog = progressMap[principle.step];
-          const isDone = !!prog?.isCompleted;
-          const isActionDone = !!prog?.actionCommitted;
+          const isDone = isStepCompleted(prog);
+          const isActionDone = Boolean(prog?.actionCommitted);
 
           return (
             <div
@@ -429,8 +545,8 @@ export const BiblicalPrinciples: React.FC = () => {
                         My Confidential Study Notes & Prayer
                       </label>
                       {saveSuccess === principle.step && (
-                        <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" /> Notes Saved
+                        <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 animate-pulse">
+                          <Check className="w-4 h-4 stroke-[3]" /> Step Progress & Notes Recorded to Database
                         </span>
                       )}
                     </div>
@@ -441,30 +557,52 @@ export const BiblicalPrinciples: React.FC = () => {
                         setActiveNotes(prev => ({ ...prev, [principle.step]: e.target.value }))
                       }
                       placeholder="Write your personal reflections, what God is speaking to you, and any commitments..."
-                      className="w-full p-3 rounded-2xl bg-white/5 border border-white/10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all resize-none"
+                      className="w-full p-3.5 rounded-2xl bg-white/5 border border-white/10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all resize-none shadow-inner"
                     />
-                    <div className="flex items-center justify-between pt-1">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleActionCommitted(principle.step)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
-                          isActionDone
-                            ? 'bg-emerald-600/30 text-emerald-200 border border-emerald-500/40'
-                            : 'bg-white/5 text-slate-400 hover:text-white border border-white/10'
-                        }`}
-                      >
-                        {isActionDone ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Circle className="w-3.5 h-3.5" />}
-                        <span>I commit to this action step today</span>
-                      </button>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* 1. Commit to Action Step Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActionCommitted(principle.step)}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+                            isActionDone
+                              ? 'bg-emerald-600/30 text-emerald-200 border border-emerald-500/50 shadow-sm shadow-emerald-500/20'
+                              : 'bg-white/5 text-slate-400 hover:text-white border border-white/10 hover:border-amber-500/40'
+                          }`}
+                        >
+                          {isActionDone ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <Circle className="w-4 h-4 shrink-0 text-slate-500" />
+                          )}
+                          <span>{isActionDone ? 'Committed to action step' : 'I commit to this action step today'}</span>
+                        </button>
 
+                        {/* 2. Explicit Mark Step Completed Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCompleted(principle.step)}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+                            isDone
+                              ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
+                              : 'bg-white/5 text-slate-300 hover:text-emerald-300 border border-white/10 hover:border-emerald-500/40'
+                          }`}
+                        >
+                          <Check className={`w-4 h-4 stroke-[2.5] ${isDone ? 'text-slate-950' : 'text-slate-400'}`} />
+                          <span>{isDone ? `Step ${principle.step} Completed` : `Mark Step ${principle.step} Completed`}</span>
+                        </button>
+                      </div>
+
+                      {/* 3. Save Notes & Step Progress */}
                       <button
                         type="button"
                         onClick={() => handleSaveNotes(principle.step)}
                         disabled={isSaving === principle.step}
-                        className="px-4 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-amber-500/25 active:scale-95 disabled:opacity-50"
                       >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{isSaving === principle.step ? 'Saving...' : 'Save Notes'}</span>
+                        <Save className="w-4 h-4" />
+                        <span>{isSaving === principle.step ? 'Saving...' : 'Save Notes & Progress'}</span>
                       </button>
                     </div>
                   </div>

@@ -192,18 +192,22 @@ export function createRecoveryRoutes(): Router {
 
   router.get('/user-principles/:userId', (req, res) => {
     try {
-      const progress = recoveryService.getUserPrinciples(req.params.userId);
+      const userId = decodeURIComponent(req.params.userId || '');
+      const progress = recoveryService.getUserPrinciples(userId);
       res.json({ progress });
     } catch (err: any) {
+      console.error('[API /recovery/user-principles GET] Error:', err);
       res.status(500).json({ error: err.message || 'Failed to get principles progress' });
     }
   });
 
   router.post('/user-principles/:userId', (req, res) => {
     try {
-      const updated = recoveryService.saveUserPrinciple(req.params.userId, req.body);
-      res.json({ progress: updated });
+      const userId = decodeURIComponent(req.params.userId || '');
+      const updated = recoveryService.saveUserPrinciple(userId, req.body);
+      res.json({ success: true, progress: updated });
     } catch (err: any) {
+      console.error('[API /recovery/user-principles POST] Error:', err);
       res.status(500).json({ error: err.message || 'Failed to save principle progress' });
     }
   });

@@ -156,8 +156,8 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     refreshFeed();
-    // Real-time cross-device sync interval (every 2.5 seconds)
-    const interval = setInterval(refreshFeed, 2500);
+    // Real-time cross-device sync interval (every 10 seconds to keep mobile responsive)
+    const interval = setInterval(refreshFeed, 10000);
     return () => clearInterval(interval);
   }, []);
 
