@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
   group: aura-prod
@@ -14,22 +15,17 @@ jobs:
     name: Deploy to Aura-prod
     runs-on: ubuntu-latest
     steps:
-      - name: Update the live server
+      - name: Trigger Server Update & Build
         uses: appleboy/ssh-action@v1.2.2
         with:
-          host: 54.80.229.108
-          username: ubuntu
-          key: ${{ secrets.AURA_SSH_KEY }}
-          script_stop: true
+          host: ${{ secrets.SERVER_HOST || '54.80.229.108' }}
+          username: ${{ secrets.SERVER_USER || 'ubuntu' }}
+          key: ${{ secrets.AURA_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 20m
           script: |
             set -euo pipefail
+            echo "🚀 [Deploy] Triggered by GitHub push to main"
             cd /home/ubuntu/Aura-prod
-            git fetch origin main
-            git checkout main
-            git reset --hard origin/main
-            npm install --legacy-peer-deps --no-audit
-            npm run build
-            pm2 restart aura --update-env
-            pm2 save
-            curl -fsS http://127.0.0.1:3000/api/health
-            echo
+            chmod +x scripts/*.sh 2>/dev/null || true
+            ./scripts/update-server.sh
+            echo "✅ [Deploy] Server update completed successfully!"
