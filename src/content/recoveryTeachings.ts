@@ -2,6 +2,197 @@ import { RecoveryTeaching } from '../types/recovery';
 
 export const RECOVERY_TEACHINGS_DATA: RecoveryTeaching[] = [
   {
+  "id": "rec_teach_ru_1",
+  "title": "RU Principle 1: If God Is Against It, So Am I",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "34:10",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=_TonRgs6JiU",
+  "thumbnailUrl": "https://i.ytimg.com/vi/_TonRgs6JiU/hqdefault.jpg",
+  "scriptureRef": "Galatians 5:19-24",
+  "description": "Aligning our will with God's Word. If God opposes a practice or habit, we take our stand with God—renouncing all excuses and finding real liberty in Jesus Christ.",
+  "likesCount": 1540,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 1",
+    "Surrender"
+  ],
+  "keyQuote": "If God is against it, so am I! Aligning with God brings supernatural liberty."
+},
+  {
+  "id": "rec_teach_ru_2",
+  "title": "RU Principle 2: Every Sin Has Its Origin in Our Hearts",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "29:45",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=MTzfz_MY7hM",
+  "thumbnailUrl": "https://i.ytimg.com/vi/MTzfz_MY7hM/hqdefault.jpg",
+  "scriptureRef": "Jeremiah 17:9 & Proverbs 4:23",
+  "description": "Sin is not merely an external trigger or environment; it is conceived in the inner man. Guard your heart with all diligence, for out of it are the issues of life.",
+  "likesCount": 1820,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 2",
+    "Heart Cleanse"
+  ],
+  "keyQuote": "What you think, feel, and desire in your heart determines your actions."
+},
+  {
+  "id": "rec_teach_ru_3",
+  "title": "RU Principle 3: It Is Easier to Keep the Heart Clean Than Clean It Defiled",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "38:20",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=6s0maNd7DiA",
+  "thumbnailUrl": "https://i.ytimg.com/vi/6s0maNd7DiA/hqdefault.jpg",
+  "scriptureRef": "Proverbs 22:3 & Proverbs 6:27-28",
+  "description": "Prevention is far simpler than repair. A prudent person foresees the snare and turns aside, refusing to let the enemy plant seeds of compromise.",
+  "likesCount": 2190,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 3",
+    "Vigilance"
+  ],
+  "keyQuote": "It is easier to keep the heart clean than it is to clean it after it has been defiled."
+},
+  {
+  "id": "rec_teach_ru_4",
+  "title": "RU Principle 4: You Cannot Fight a Fleshly Appetite by Indulging in It",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "32:15",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=rPMoVIWOIv4",
+  "thumbnailUrl": "https://i.ytimg.com/vi/rPMoVIWOIv4/hqdefault.jpg",
+  "scriptureRef": "Ecclesiastes 5:10 & James 1:14-15",
+  "description": "Feeding a carnal desire only magnifies its hunger. You cannot pacify the flesh by giving in 'just once.' Victory comes through starving the flesh and feeding the spirit.",
+  "likesCount": 2430,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 4",
+    "Self-Control"
+  ],
+  "keyQuote": "You cannot put out a fire by pouring gasoline on it. Starve the flesh."
+},
+  {
+  "id": "rec_teach_ru_5",
+  "title": "RU Principle 5: Small Compromises Lead to Great Disasters",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "35:40",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=zzGe6CMsU-g",
+  "thumbnailUrl": "https://i.ytimg.com/vi/zzGe6CMsU-g/hqdefault.jpg",
+  "scriptureRef": "Luke 16:10 & Romans 6:16",
+  "description": "No one falls into deep bondage overnight. Great spiritual downfalls always begin with small, rationalized compromises. Watch the little foxes that spoil the vines.",
+  "likesCount": 2680,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 5",
+    "Compromise"
+  ],
+  "keyQuote": "No one falls into deep sin without first taking small compromise steps."
+},
+  {
+  "id": "rec_teach_ru_6",
+  "title": "RU Principle 6: Those Who Do Not Love the Lord Will Not Help Us Serve the Lord",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "36:15",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=5LVB0L12sX4",
+  "thumbnailUrl": "https://i.ytimg.com/vi/5LVB0L12sX4/hqdefault.jpg",
+  "scriptureRef": "1 Corinthians 15:33 & 2 Corinthians 6:14",
+  "description": "Evil company corrupts good habits. Those who do not love Christ cannot guide you toward Christ. Choose godly fellowship and authentic spiritual accountability.",
+  "likesCount": 3120,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 6",
+    "Fellowship"
+  ],
+  "keyQuote": "Those who do not love the Lord will not help us serve the Lord."
+},
+  {
+  "id": "rec_teach_ru_7",
+  "title": "RU Principle 7: Our Sinful Habits Do Hurt Those Who Follow Us",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "31:50",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=7bRAC2H40hc",
+  "thumbnailUrl": "https://i.ytimg.com/vi/7bRAC2H40hc/hqdefault.jpg",
+  "scriptureRef": "Romans 14:7 & 1 Corinthians 10:23-24",
+  "description": "None of us lives unto himself. Our secret compromises and destructive habits directly harm children, spouses, church family, and those observing our walk.",
+  "likesCount": 2890,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 7",
+    "Family"
+  ],
+  "keyQuote": "Your habits are not your own private business; they impact everyone who loves you."
+},
+  {
+  "id": "rec_teach_ru_8",
+  "title": "RU Principle 8: It Is Not Possible to Fight Fleshly Temptation with Fleshly Weapons",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "33:25",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=euZ1OsSqqpo",
+  "thumbnailUrl": "https://i.ytimg.com/vi/euZ1OsSqqpo/hqdefault.jpg",
+  "scriptureRef": "2 Corinthians 10:3-5 & Ephesians 6:10-18",
+  "description": "Human willpower, psychological gimmicks, and secular patches cannot conquer spiritual strongholds. We pull down strongholds through the Word, prayer, and the Holy Spirit.",
+  "likesCount": 3410,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 8",
+    "Spiritual Warfare"
+  ],
+  "keyQuote": "Spiritual strongholds require spiritual weapons: the Word of God and the Spirit."
+},
+  {
+  "id": "rec_teach_ru_9",
+  "title": "RU Principle 9: We Lose Our Freedom of Choice After We Choose Our Actions",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "37:45",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=rSUO3zTthzQ",
+  "thumbnailUrl": "https://i.ytimg.com/vi/rSUO3zTthzQ/hqdefault.jpg",
+  "scriptureRef": "Proverbs 5:22 & Galatians 6:7-8",
+  "description": "We are free to make our choices, but once chosen, the consequences are inevitable, incalculable, and completely in God's hands. Yield to truth before yielding to temptation.",
+  "likesCount": 3670,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 9",
+    "Truth"
+  ],
+  "keyQuote": "You are free to choose, but you are never free to choose the consequences."
+},
+  {
+  "id": "rec_teach_ru_10",
+  "title": "RU Principle 10: God Balances Guilt with Blame (Removing Guilt Through Confession)",
+  "speaker": "Reformers Unanimous (Steve Curington)",
+  "duration": "40:10",
+  "category": "principles",
+  "audioUrl": "https://www.youtube.com/watch?v=2YpNozYsmlc",
+  "thumbnailUrl": "https://i.ytimg.com/vi/2YpNozYsmlc/hqdefault.jpg",
+  "scriptureRef": "1 John 1:9 & Proverbs 28:13",
+  "description": "When we stop shifting blame and fully confess our sins, God by our repentance and confession eliminates the guilt through the cleansing blood of Jesus Christ.",
+  "likesCount": 4180,
+  "tags": [
+    "Reformers Unanimous",
+    "RU Recovery",
+    "Principle 10",
+    "Confession"
+  ],
+  "keyQuote": "Accept the blame for your actions, and God will remove the guilt."
+},
+  
+  {
     id: 'rec_teach_1',
     title: 'Celebrate Recovery: Lesson 1 - Denial',
     speaker: 'Pastor John Baker',

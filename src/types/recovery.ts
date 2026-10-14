@@ -64,7 +64,7 @@ export interface RecoveryTeaching {
   title: string;
   speaker: string;
   duration: string;
-  category: 'substance' | 'anxiety' | 'purity' | 'deliverance' | 'grace' | 'general';
+  category: 'substance' | 'anxiety' | 'purity' | 'deliverance' | 'grace' | 'general' | 'principles' | 'ru-recovery';
   audioUrl: string;
   thumbnailUrl: string;
   scriptureRef: string;

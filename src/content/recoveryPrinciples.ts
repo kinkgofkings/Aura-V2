@@ -242,3 +242,247 @@ export const CORE_BIBLICAL_RECOVERY_PRINCIPLES: RecoveryPrinciple[] = [
     affirmation: 'They overcame him by the blood of the Lamb, and by the word of their testimony (Rev 12:11).'
   }
 ];
+
+
+export const REFORMERS_UNANIMOUS_10_PRINCIPLES: RecoveryPrinciple[] = [
+  {
+    step: 1,
+    title: "If God is Against It, So Am I",
+    subtitle: "Aligning our standards and desires with God's Holy Word",
+    biblicalTheme: "Absolute Alignment with God",
+    scripture: {
+      reference: "Galatians 5:19-24 & Ephesians 5:11",
+      text: "Now the works of the flesh are manifest, which are these; Adultery, fornication, uncleanness, lasciviousness... And have no fellowship with the unfruitful works of darkness, but rather reprove them."
+    },
+    summary: "Victory in recovery begins when we stop making excuses, rationalizations, or exceptions for our sin. If God opposes it in Scripture, we align our will with Him.",
+    biblicalTruth: "You cannot conquer what you refuse to call sin. Calling sin what God calls it brings instant spiritual clarity and breaks the deception of the enemy.",
+    reflectionQuestions: [
+      "Are there habits or gray areas in your life that you have defended, even though God is against them?",
+      "What excuses have you made to justify keeping secret compromises?",
+      "Are you willing to say from the depth of your heart: 'Lord, if You hate it, I choose to hate it too'?"
+    ],
+    actionSteps: [
+      "Identify any pet sins or rationalized compromises and write them down before God.",
+      "Pray aloud declaring that you stand with God's Word against every former addiction.",
+      "Remove any media, items, or triggers from your home that God is against."
+    ],
+    prayer: "Heavenly Father, I choose to align my thoughts and affections with Your Holy Word. Forgive me for justifying what grieves Your Holy Spirit. If You are against it, I am against it. In Jesus' name, Amen.",
+    affirmation: "I stand with God. What He opposes, I reject; what He commands, I embrace in Christ's power."
+  },
+  {
+    step: 2,
+    title: "Every Sin Has Its Origin in Our Hearts",
+    subtitle: "Guarding the inner fountain of thoughts, desires, and motives",
+    biblicalTheme: "The Heart as the Root of Behavior",
+    scripture: {
+      reference: "Jeremiah 17:9, Proverbs 4:23 & Romans 13:14",
+      text: "Keep thy heart with all diligence; for out of it are the issues of life... The heart is deceitful above all things, and desperately wicked: who can know it?"
+    },
+    summary: "Sin does not start with the bottle, the screen, or the needle; it is conceived in the secret desires and unchecked thoughts of our inner heart.",
+    biblicalTruth: "Behavior modification will always fail if the heart remains untreated. Jesus did not come to manage our behavior; He came to transform our hearts.",
+    reflectionQuestions: [
+      "What thoughts or fantasies do you entertain in private before a physical stumble occurs?",
+      "How do bitterness, envy, or pride in your heart fuel your cravings for physical escape?",
+      "Are you willing to let the Holy Spirit examine and purify your heart daily?"
+    ],
+    actionSteps: [
+      "Practice taking every thought captive immediately when temptation whispers (2 Cor 10:5).",
+      "Confess heart sins (resentment, covetousness, pride) before they turn into outward habits.",
+      "Spend 10 minutes in silent prayer asking God to create in you a clean heart (Psalm 51:10)."
+    ],
+    prayer: "Search me, O God, and know my heart: try me, and know my thoughts: And see if there be any wicked way in me, and lead me in the way everlasting. Amen.",
+    affirmation: "With God's help, I guard my heart with all diligence, for out of it flows the spring of life."
+  },
+  {
+    step: 3,
+    title: "It Is Easier to Keep the Heart Clean Than to Clean It After Defilement",
+    subtitle: "The power of biblical prevention over costly repair",
+    biblicalTheme: "Spiritual Prevention & Prudence",
+    scripture: {
+      reference: "Proverbs 22:3 & Proverbs 6:27-28",
+      text: "A prudent man foreseeth the evil, and hideth himself: but the simple pass on, and are punished. Can a man take fire in his bosom, and his clothes not be burned?"
+    },
+    summary: "Prevention is far less agonizing than recovery after a fall. Maintaining a clean heart daily through Scripture and prayer avoids the wreckage of relapse.",
+    biblicalTruth: "You cannot entertain temptation and expect to escape without spiritual burns. Staying away from the cliff is infinitely safer than trying not to fall when standing on the edge.",
+    reflectionQuestions: [
+      "What warning signs or dangerous environments do you ignore before stepping into temptation?",
+      "Why is daily time in God's Word essential for keeping your spiritual filters clean?",
+      "What boundaries can you put in place today so you never enter the danger zone?"
+    ],
+    actionSteps: [
+      "Establish a non-negotiable morning devotional habit before checking your phone or emails.",
+      "Set strict digital boundaries and accountability software on all internet-connected devices.",
+      "Avoid places, times of day, or isolated routines where previous relapses occurred."
+    ],
+    prayer: "Lord, give me spiritual prudence to foresee evil and hide myself in Your grace. Keep my heart pure so I never have to experience the agony of defilement. Amen.",
+    affirmation: "I am prudent in Christ; I foresee the snare of the enemy and walk in God's protective light."
+  },
+  {
+    step: 4,
+    title: "You Cannot Fight a Fleshly Appetite by Indulging in It",
+    subtitle: "Starving the flesh and feeding the spirit for true victory",
+    biblicalTheme: "Mortification of the Flesh",
+    scripture: {
+      reference: "Ecclesiastes 5:10, James 1:14-15 & Romans 8:13",
+      text: "For if ye live after the flesh, ye shall die: but if ye through the Spirit do mortify the deeds of the body, ye shall live."
+    },
+    summary: "Feeding an addiction never satisfies it; it only makes the appetite stronger and more demanding. You cannot conquer fleshly desires by giving in 'just once more.'",
+    biblicalTruth: "The flesh is a bottomless pit that demands more each time it is fed. The only biblical solution to fleshly appetite is to starve it to death through the power of the Holy Spirit.",
+    reflectionQuestions: [
+      "Has giving in to your craving ever actually satisfied it, or did it only make the next craving stronger?",
+      "What are the specific 'foods' (media, conversations, environments) that feed your fleshly desires?",
+      "How can you feed your spirit today so that the desires of the flesh lose their power?"
+    ],
+    actionSteps: [
+      "Fast from one comfort or distraction today to practice saying no to the physical appetite.",
+      "Feed your spirit by reading 3 chapters of Psalms or Proverbs whenever a craving strikes.",
+      "Memorize Romans 8:13 and speak it aloud when physical urges press."
+    ],
+    prayer: "Lord Jesus, I recognize that my flesh will never be satisfied by indulging it. By Your Spirit, I mortify the deeds of the body. Fill me with Your Holy Spirit today. Amen.",
+    affirmation: "I starve the flesh and feed my spirit. Through the Holy Spirit, I have dominion over bodily appetites."
+  },
+  {
+    step: 5,
+    title: "Small Compromises Lead to Great Disasters",
+    subtitle: "Guarding against 'little sins' that open the door to destruction",
+    biblicalTheme: "Vigilance in the Little Things",
+    scripture: {
+      reference: "Luke 16:10, Romans 6:16 & Song of Solomon 2:15",
+      text: "He that is faithful in that which is least is faithful also in much: and he that is unjust in the least is unjust also in much. Take us the foxes, the little foxes, that spoil the vines."
+    },
+    summary: "No one falls into catastrophic bondage or scandal overnight. Every great disaster began with a small, seemingly harmless compromise that was left unchecked.",
+    biblicalTruth: "Satan does not usually tempt believers with full-blown ruin immediately; he lures them one inch at a time through subtle compromises.",
+    reflectionQuestions: [
+      "What 'small' compromises have you tolerated in recent weeks?",
+      "How did your very first compromise eventually snowball into your major addiction?",
+      "Are you willing to be radically faithful in the smallest details of your spiritual life?"
+    ],
+    actionSteps: [
+      "Do a ruthless audit of minor compromises: white lies, slight glances, minor omissions.",
+      "Close the door on the 'little foxes' today before they grow into destructive habits.",
+      "Ask a godly friend to hold you accountable in the smallest areas of daily honesty."
+    ],
+    prayer: "Holy God, forgive me for overlooking small sins. Open my eyes to the danger of subtle compromises. Give me a holy desire to be faithful in that which is least. Amen.",
+    affirmation: "I am faithful in the small things. I refuse all compromise, knowing that holiness protects my future."
+  },
+  {
+    step: 6,
+    title: "Those Who Do Not Love the Lord Will Not Help Us Serve the Lord",
+    subtitle: "Choosing godly companions and biblical fellowship",
+    biblicalTheme: "The Power of Companionship",
+    scripture: {
+      reference: "1 Corinthians 15:33, 2 Corinthians 6:14 & Proverbs 13:20",
+      text: "Be not deceived: evil communications corrupt good manners. He that walketh with wise men shall be wise: but a companion of fools shall be destroyed."
+    },
+    summary: "People who do not love God cannot guide or support you in obeying God. Surrounding yourself with worldly or unrepentant companions will inevitably derail your recovery.",
+    biblicalTruth: "You become like those you spend the most time with. Godly recovery demands godly associations, faithful church attendance, and spiritually mature mentors.",
+    reflectionQuestions: [
+      "Are there friendships or connections in your life that consistently pull you away from Jesus?",
+      "Why is it dangerous to seek recovery counsel or emotional comfort from worldly acquaintances?",
+      "Who are the godly brothers and sisters in Christ who actively encourage your spiritual walk?"
+    ],
+    actionSteps: [
+      "Cut off contact with former 'using buddies' or compromise partners immediately.",
+      "Commit to attending weekly church services and a biblical recovery meeting faithfully.",
+      "Reach out to one mature Christian mentor and ask for regular spiritual check-ins."
+    ],
+    prayer: "Lord, give me courage to disconnect from ungodly influences that hinder my walk with You. Surround me with brothers and sisters who truly love You and will help me serve You. Amen.",
+    affirmation: "I walk with the wise. I choose friends who love Jesus and sharpen my spiritual walk."
+  },
+  {
+    step: 7,
+    title: "Our Sinful Habits Do Hurt Those Who Follow Us",
+    subtitle: "Recognizing the ripple effect and generational impact of our choices",
+    biblicalTheme: "Responsibility & Generational Impact",
+    scripture: {
+      reference: "Romans 14:7, 1 Corinthians 10:23-24 & Luke 17:1-2",
+      text: "For none of us liveth to himself, and no man dieth to himself. Let no man seek his own, but every man another's wealth."
+    },
+    summary: "Addiction is never a private crime. Our sinful habits inflict deep emotional, spiritual, and physical trauma upon our spouses, children, parents, and friends.",
+    biblicalTruth: "The enemy deceives addicts into believing 'I am only hurting myself.' Scripture reveals that our lives are intertwined, and generational curses are passed down through tolerated sin.",
+    reflectionQuestions: [
+      "Who has suffered the most from your habits, anger, absences, or deceit?",
+      "How does recognizing the pain inflicted on your loved ones motivate you to seek real freedom?",
+      "What generational legacy do you want to leave for your children and family?"
+    ],
+    actionSteps: [
+      "Make a written list of family members, children, or friends wounded by your past actions.",
+      "Pray for their emotional and spiritual healing every single morning.",
+      "When appropriate and safe, begin making humble amends and living a life of quiet fruitfulness."
+    ],
+    prayer: "Father, break my heart for the pain my sins have caused to those I love. Heal the wounds of my children, spouse, and family. Let my recovery become a testimony of Your redeeming grace. Amen.",
+    affirmation: "I do not live unto myself. My walk of righteousness brings safety, blessing, and joy to those who follow me."
+  },
+  {
+    step: 8,
+    title: "It Is Not Possible to Fight Fleshly Temptation with Fleshly Weapons",
+    subtitle: "Wielding the spiritual armor of God for lasting deliverance",
+    biblicalTheme: "Spiritual Warfare & Divine Weapons",
+    scripture: {
+      reference: "2 Corinthians 10:3-5 & Ephesians 6:10-18",
+      text: "For though we walk in the flesh, we do not war after the flesh: (For the weapons of our warfare are not carnal, but mighty through God to the pulling down of strong holds;)"
+    },
+    summary: "Human willpower, modern self-help slogans, and worldly coping mechanisms cannot conquer demonic or spiritual strongholds. We win only through prayer, Scripture, and the Holy Spirit.",
+    biblicalTruth: "Addiction is not merely a psychological condition; it is a spiritual battle. Carnal weapons cannot defeat spiritual enemies. You must use the sword of the Spirit, which is the Word of God.",
+    reflectionQuestions: [
+      "In what ways have you tried to use 'carnal weapons' (willpower, self-help books, secular slogans) and failed?",
+      "How does quoting specific Scripture out loud change the atmosphere when temptation attacks?",
+      "Are you putting on the whole armor of God every morning in prayer?"
+    ],
+    actionSteps: [
+      "Memorize 3 specific scripture promises directly targeting your area of temptation.",
+      "When temptation hits, speak God's Word aloud and pray immediately instead of debating with your thoughts.",
+      "Put on the armor of God daily: truth, righteousness, gospel of peace, faith, salvation, and the Word."
+    ],
+    prayer: "Lord Jesus, I lay down the weak, broken weapons of human effort. I take up the shield of faith and the sword of the Spirit. Pulldown every stronghold in my mind by the power of Your Word. Amen.",
+    affirmation: "The weapons of my warfare are not carnal, but mighty through God to the pulling down of strongholds!"
+  },
+  {
+    step: 9,
+    title: "We Lose Our Freedom of Choice After We Choose Our Actions",
+    subtitle: "Understanding that the consequences of sin are inevitable and in God's hands",
+    biblicalTheme: "The Law of the Harvest",
+    scripture: {
+      reference: "Proverbs 5:22, Proverbs 20:17 & Galatians 6:7-8",
+      text: "Be not deceived; God is not mocked: for whatsoever a man soweth, that shall he also reap. His own iniquities shall take the wicked himself, and he shall be holden with the cords of his sins."
+    },
+    summary: "You are totally free to choose your action, but once that action is taken, you lose all control over the consequences. The consequences are inevitable, incalculable, and completely up to God.",
+    biblicalTruth: "Sin promises pleasure but delivers gravel and chains. Sowing to the flesh always reaps corruption, but sowing to the Spirit reaps everlasting life and peace.",
+    reflectionQuestions: [
+      "Have you ever thought you could control the consequences of a relapse, only to watch everything unravel?",
+      "What painful harvests have you reaped in the past from seeds of indulgence?",
+      "How does remembering that consequences are in God's hands help you pause before sinning?"
+    ],
+    actionSteps: [
+      "Whenever temptation whispers 'just this once without consequences,' remind yourself of the harvest law.",
+      "Write down the three worst consequences of your previous relapses and keep them accessible.",
+      "Sow seeds of righteousness today by serving someone else in the fellowship."
+    ],
+    prayer: "Lord, grant me holy fear and wisdom to understand the law of the harvest. Keep me from the deceitful lie that I can sin and avoid the consequences. Help me sow to the Spirit today. Amen.",
+    affirmation: "I choose righteousness today. I sow to the Spirit and trust God for a harvest of peace, freedom, and joy."
+  },
+  {
+    step: 10,
+    title: "God Balances Guilt with Blame (Removing Guilt Through Confession)",
+    subtitle: "Taking full responsibility before God to experience total forgiveness and cleansing",
+    biblicalTheme: "Repentance, Confession & Justification",
+    scripture: {
+      reference: "1 John 1:9, Proverbs 28:13 & Psalm 32:5",
+      text: "If we confess our sins, he is faithful and just to forgive us our sins, and to cleanse us from all unrighteousness. He that covereth his sins shall not prosper: but whoso confesseth and forsaketh them shall have mercy."
+    },
+    summary: "Guilt is removed only when blame is accepted. When we stop blaming our upbringing, spouses, circumstances, or stress, and take full personal blame before God, His blood washes away all guilt.",
+    biblicalTruth: "Covering your sin prolongs the torment of guilt and shame. Uncovering your sin in radical, honest confession allows the blood of Jesus Christ to cover and eliminate it completely.",
+    reflectionQuestions: [
+      "Are you still blaming circumstances, genetics, other people, or past trauma for your choices?",
+      "Why is taking personal responsibility before God the doorway to true spiritual freedom?",
+      "Have you experienced the glorious relief of 1 John 1:9 where Christ cleanses away all unrighteousness?"
+    ],
+    actionSteps: [
+      "Stop all blame-shifting: acknowledge 'I chose this sin, and I am responsible before God.'",
+      "Confess every unconfessed sin to Jesus Christ right now, claiming His total cleansing.",
+      "Rejoice in the freedom of condemnation removed: 'There is therefore now no condemnation to them which are in Christ Jesus' (Romans 8:1)."
+    ],
+    prayer: "Father, I stop shifting blame. I own my sin and foolish choices. I bring every failure to the cross of Jesus Christ. Forgive me, wash me, and remove my guilt by the blood of the Lamb. Amen.",
+    affirmation: "I accept the blame, and God eliminates the guilt! I am forgiven, cleansed, and justified in Jesus Christ!"
+  }
+];

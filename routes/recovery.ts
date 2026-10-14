@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { recoveryService } from '../server/recoveryService';
 import { pushToUser } from '../server/realtime';
-import { CORE_BIBLICAL_RECOVERY_PRINCIPLES } from '../src/content/recoveryPrinciples';
+import { CORE_BIBLICAL_RECOVERY_PRINCIPLES, REFORMERS_UNANIMOUS_10_PRINCIPLES } from '../src/content/recoveryPrinciples';
 import { RECOVERY_TEACHINGS_DATA } from '../src/content/recoveryTeachings';
 
 export function createRecoveryRoutes(): Router {
@@ -187,7 +187,7 @@ export function createRecoveryRoutes(): Router {
   });
 
   router.get('/principles', (_req, res) => {
-    res.json({ principles: CORE_BIBLICAL_RECOVERY_PRINCIPLES });
+    res.json({ principles: CORE_BIBLICAL_RECOVERY_PRINCIPLES, ruPrinciples: REFORMERS_UNANIMOUS_10_PRINCIPLES });
   });
 
   router.get('/user-principles/:userId', (req, res) => {

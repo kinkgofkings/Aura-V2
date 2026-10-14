@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Video,
+  Play,
   BookOpen,
   CheckCircle2,
   Circle,
@@ -12,7 +14,7 @@ import {
   Check,
   Share2
 } from 'lucide-react';
-import { CORE_BIBLICAL_RECOVERY_PRINCIPLES } from '../../content/recoveryPrinciples';
+import { CORE_BIBLICAL_RECOVERY_PRINCIPLES, REFORMERS_UNANIMOUS_10_PRINCIPLES } from '../../content/recoveryPrinciples';
 import { RecoveryPrinciple, UserPrincipleProgress } from '../../types/recovery';
 import { useAuth } from '../../context/AuthContext';
 import { soundEffects } from '../../services/audio';
@@ -22,6 +24,40 @@ import confetti from 'canvas-confetti';
 export const BiblicalPrinciples: React.FC = () => {
   const { user } = useAuth();
   const userId = user?.id || 'guest_local';
+
+    const [selectedSet, setSelectedSet] = useState<'ru' | 'biblical'>(() => {
+    try {
+      const saved = localStorage.getItem('aura_principles_active_set');
+      return (saved === 'biblical' ? 'biblical' : 'ru');
+    } catch {
+      return 'ru';
+    }
+  });
+
+  const [activeVideoModal, setActiveVideoModal] = useState<{ ytId: string; title: string; step: number } | null>(null);
+
+  const RU_VIDEO_MAP: Record<number, { id: string; ytId: string; title: string }> = {
+    1: { id: "yt-ru-1", ytId: "_TonRgs6JiU", title: "RU Principle 1: If God Is Against It, So Am I" },
+    2: { id: "yt-ru-2", ytId: "MTzfz_MY7hM", title: "RU Principle 2: Every Sin Has Its Origin in Our Hearts" },
+    3: { id: "yt-ru-3", ytId: "6s0maNd7DiA", title: "RU Principle 3: Keeping the Heart Clean (Prevention Over Cure)" },
+    4: { id: "yt-ru-4", ytId: "rPMoVIWOIv4", title: "RU Principle 4: Starving the Fleshly Appetite" },
+    5: { id: "yt-ru-5", ytId: "zzGe6CMsU-g", title: "RU Principle 5: Small Compromises Lead to Great Disasters" },
+    6: { id: "yt-ru-6", ytId: "5LVB0L12sX4", title: "RU Principle 6: Those Who Do Not Love the Lord Will Not Help Us Serve the Lord" },
+    7: { id: "yt-ru-7", ytId: "7bRAC2H40hc", title: "RU Principle 7: Our Sinful Habits Do Hurt Those Who Follow Us" },
+    8: { id: "yt-ru-8", ytId: "euZ1OsSqqpo", title: "RU Principle 8: Spiritual Weapons for Spiritual Warfare" },
+    9: { id: "yt-ru-9", ytId: "rSUO3zTthzQ", title: "RU Principle 9: The Inevitable Consequences of Choice" },
+    10: { id: "yt-ru-10", ytId: "2YpNozYsmlc", title: "RU Principle 10: God Balances Guilt with Blame" },
+  };
+
+  const handleSelectSet = (set: 'ru' | 'biblical') => {
+    soundEffects.playTap();
+    setSelectedSet(set);
+    try {
+      localStorage.setItem('aura_principles_active_set', set);
+    } catch {}
+  };
+
+  const activePrinciples = selectedSet === 'ru' ? REFORMERS_UNANIMOUS_10_PRINCIPLES : CORE_BIBLICAL_RECOVERY_PRINCIPLES;
 
   const [expandedStep, setExpandedStep] = useState<number | null>(() => {
     try {
@@ -312,12 +348,40 @@ export const BiblicalPrinciples: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
-                10 Biblical Steps
+                {selectedSet === 'ru' ? 'Reformers Unanimous Channel' : '10 Biblical Steps'}
               </span>
               <span className="text-xs text-slate-400">Christ-Centered Deliverance</span>
             </div>
+                    {/* Principles Set Switcher */}
+        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-black/40 border border-white/10 rounded-2xl mb-5">
+          <button
+            type="button"
+            onClick={() => handleSelectSet('ru')}
+            className={`flex-1 min-w-[200px] px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ${
+              selectedSet === 'ru'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-lg shadow-amber-500/20'
+                : 'text-slate-300 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Reformers Unanimous (RU 10 Principles)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectSet('biblical')}
+            className={`flex-1 min-w-[200px] px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ${
+              selectedSet === 'biblical'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-lg shadow-amber-500/20'
+                : 'text-slate-300 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>10 Biblical Sanctification Steps</span>
+          </button>
+        </div>
+
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              Core Biblical Recovery Principles
+              {selectedSet === 'ru' ? 'Reformers Unanimous 10 Spiritual Principles' : 'Core Biblical Recovery Principles'}
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mt-1 leading-relaxed">
               Unlike secular models that rely on generic higher powers, the Path to Freedom is anchored in the Gospel of Jesus Christ, repentance, renewing the mind, and walking in the Holy Spirit.
@@ -353,7 +417,7 @@ export const BiblicalPrinciples: React.FC = () => {
 
       {/* 10 Interactive Cards */}
       <div className="space-y-4">
-        {CORE_BIBLICAL_RECOVERY_PRINCIPLES.map(principle => {
+        {activePrinciples.map(principle => {
           const isExpanded = expandedStep === principle.step;
           const prog = progressMap[principle.step];
           const isDone = isStepCompleted(prog);
@@ -612,6 +676,47 @@ export const BiblicalPrinciples: React.FC = () => {
           );
         })}
       </div>
+      {/* Video Modal Player */}
+      {activeVideoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-3xl rounded-3xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-4 bg-slate-950/80 border-b border-white/10 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-xs font-black uppercase tracking-wider">
+                  RU Principle {activeVideoModal.step}
+                </span>
+                <h3 className="text-sm sm:text-base font-bold text-white truncate">{activeVideoModal.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveVideoModal(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors text-xs font-bold shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="relative aspect-video w-full bg-black">
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${activeVideoModal.ytId}?autoplay=1&rel=0`}
+                title={activeVideoModal.title}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+            <div className="p-3 bg-slate-950/60 flex items-center justify-between gap-2 text-xs text-slate-400">
+              <span>Official Reformers Unanimous Ministry Channel</span>
+              <button
+                type="button"
+                onClick={() => setActiveVideoModal(null)}
+                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition-colors"
+              >
+                Close Video
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -349,7 +349,8 @@ export function PodcastFeed({
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [sermons, formatFilter]);
 
-  const filtered = sermons.filter((item) => {
+  const filtered = useMemo(() => {
+    const list = sermons.filter((item) => {
     if (formatFilter !== "all" && item.format !== formatFilter) return false;
     if (sourceFilter === "stories") {
       const isStory = 
@@ -394,7 +395,16 @@ export function PodcastFeed({
       if (!matchTitle && !matchSpeaker && !matchRef && !matchSeries && !matchChannel) return false;
     }
     return true;
-  });
+    });
+
+    const qCh = selectedChannel.toLowerCase();
+    const qSer = selectedSeries.toLowerCase();
+    if (qCh.includes("reformers") || qCh.includes("ru recovery") || qSer.includes("principles") || qSer.includes("freedom")) {
+      return [...list].sort((a, b) => (a.seriesPart || 999) - (b.seriesPart || 999));
+    }
+
+    return list;
+  }, [sermons, formatFilter, sourceFilter, selectedChannel, selectedSeries, searchQuery]);
 
   const handleShareSermon = (sermon: SermonItem) => {
     soundEffects.playTap();
