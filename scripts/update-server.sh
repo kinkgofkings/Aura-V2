@@ -9,6 +9,11 @@
 
 set -e
 
+# Prevent simultaneous overlapping builds
+LOCK_FILE="/tmp/aura-deploy.lock"
+exec 200>"$LOCK_FILE"
+flock 200
+
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
 
