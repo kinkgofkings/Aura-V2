@@ -21,6 +21,7 @@ export interface OvercomerFormField {
   helperText?: string;
   options?: string[];
   defaultValue?: string;
+  required?: boolean;
 }
 
 export interface WorkbookBook {
@@ -55,11 +56,13 @@ export interface WorkbookSubmission {
   workbookId?: string;
   userId: string;
   userName: string;
+  studentName?: string;
   userAvatar?: string;
   challengeId: number;
   answers: Record<string, string>;
   studentSignature?: string;
   studentSignedDate?: string;
+  mediaUrls?: string[];
   status: 'draft' | 'submitted' | 'graded';
   grade?: 'approved' | 'needs_revision' | 'exceptional';
   teacherFeedback?: string;

@@ -4,21 +4,21 @@
   "description": "Real-time chat, HD WebRTC calling, social photo feed, and daily inspiration.",
   "icons": [
     {
-      "src": "/icon.png",
+      "src": "/icons/icon-512.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon.png",
+      "src": "/icons/icon-192.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
-      "sizes": "48x48 72x72 96x96 128x128",
+      "src": "/favicon.png",
+      "type": "image/png",
+      "sizes": "48x48",
       "purpose": "any"
     }
   ],

@@ -45,7 +45,7 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
     user?.email?.toLowerCase().includes('tex@aura.social');
 
   const [activeTab, setActiveTab] = useState<'give' | 'receipts' | 'admin'>('give');
-  const [paymentMethod, setPaymentMethod] = useState<'square_card' | 'cash_app'>('square_card');
+  const [paymentMethod, setPaymentMethod] = useState<'square_card' | 'cash_app'>('cash_app');
   const [frequency, setFrequency] = useState<'one_time' | 'monthly'>('one_time');
   const [selectedAmount, setSelectedAmount] = useState<number>(50);
   const [customAmount, setCustomAmount] = useState<string>('');
@@ -72,7 +72,7 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
   const [config, setConfig] = useState<GivingConfig>({
     ministryName: 'Aura Sanctuary & Recovery Ministries',
     taxExemptNotice: 'Thank you for your generous kingdom support. "God loveth a cheerful giver." (2 Cor 9:7)',
-    cashAppCashtag: '$AuraSanctuary',
+    cashAppCashtag: '$LightsOutHoldingLLC',
     squareAppId: 'sandbox-sq0idb-AuraMinistryLive',
     squareLocationId: 'L8J4V9W2G0'
   });
@@ -120,6 +120,10 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
   if (!isOpen) return null;
 
   const currentAmount = isCustom ? parseFloat(customAmount) || 0 : selectedAmount;
+  const currentCashtag = (config.cashAppCashtag || '$LightsOutHoldingLLC').trim();
+  const formattedCashtag = currentCashtag.startsWith('$') ? currentCashtag : `$${currentCashtag}`;
+  const cleanCashtagName = formattedCashtag.replace(/^\$/, '');
+  const cashAppDirectUrl = `https://cash.app/$${cleanCashtagName}${currentAmount > 0 ? `/${currentAmount}` : ''}`;
 
   // Format Card Number (XXXX XXXX XXXX XXXX)
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,7 +218,8 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
   };
 
   const handleCopyCashtag = () => {
-    const tag = config.cashAppCashtag || '$AuraSanctuary';
+    const rawTag = config.cashAppCashtag || '$LightsOutHoldingLLC';
+    const tag = rawTag.startsWith('$') ? rawTag : `$${rawTag}`;
     navigator.clipboard.writeText(tag);
     setCopiedCashtag(true);
     setTimeout(() => setCopiedCashtag(false), 2000);
@@ -464,6 +469,27 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                     <div className="grid grid-cols-2 gap-2.5">
                       <button
                         type="button"
+                        onClick={() => setPaymentMethod('cash_app')}
+                        className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                          paymentMethod === 'cash_app'
+                            ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-md'
+                            : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black">
+                          $
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold">Cash App Direct</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/30 text-emerald-300">Active</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono font-bold">{formattedCashtag}</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => setPaymentMethod('square_card')}
                         className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
                           paymentMethod === 'square_card'
@@ -476,25 +502,7 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                         </div>
                         <div>
                           <div className="text-xs font-bold">Square Card Pay</div>
-                          <div className="text-[10px] text-slate-400">Credit / Debit Card</div>
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('cash_app')}
-                        className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                          paymentMethod === 'cash_app'
-                            ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-md'
-                            : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
-                        }`}
-                      >
-                        <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black">
-                          $
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold">Cash App Direct</div>
-                          <div className="text-[10px] text-slate-400">{config.cashAppCashtag || '$AuraSanctuary'}</div>
+                          <div className="text-[10px] text-slate-400">PNC Sync on Tuesday</div>
                         </div>
                       </button>
                     </div>
@@ -596,11 +604,12 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                     /* Cash App View */
                     <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-400">
-                          Direct Cash App Giving
+                        <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          Direct Cash App Giving (Active Now)
                         </span>
                         <span className="text-[11px] text-slate-400">
-                          Cashtag: <strong className="text-white">{config.cashAppCashtag || '$AuraSanctuary'}</strong>
+                          Cashtag: <strong className="text-white font-mono">{formattedCashtag}</strong>
                         </span>
                       </div>
 
@@ -611,11 +620,11 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                           className="flex-1 py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors border border-white/10"
                         >
                           {copiedCashtag ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{copiedCashtag ? 'Cashtag Copied!' : `Copy ${config.cashAppCashtag || '$AuraSanctuary'}`}</span>
+                          <span>{copiedCashtag ? 'Cashtag Copied!' : `Copy ${formattedCashtag}`}</span>
                         </button>
 
                         <a
-                          href={`https://cash.app/${(config.cashAppCashtag || '$AuraSanctuary').replace('$', '')}/${currentAmount > 0 ? currentAmount : ''}`}
+                          href={cashAppDirectUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-lg shadow-emerald-500/20"
@@ -625,9 +634,9 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                         </a>
                       </div>
 
-                      <p className="text-[11px] text-slate-400">
-                        Prefer to run your card in-app? Switch above to <strong>Square Card Pay</strong> — it charges your card directly through Square with zero app redirects!
-                      </p>
+                      <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-500/20 text-[11px] text-emerald-200/90 leading-relaxed">
+                        Direct transfers to <strong className="text-white font-mono">{formattedCashtag}</strong> go straight to the ministry. Square in-app credit/debit card processing is configured and will be connected with our PNC business banking on Tuesday!
+                      </div>
                     </div>
                   )}
 
@@ -672,25 +681,63 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                     />
                   </div>
 
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || currentAmount <= 0}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                  >
-                    {isSubmitting ? (
-                      <span>Authorizing Gift with Square...</span>
-                    ) : (
-                      <>
-                        <Heart className="w-4 h-4 fill-slate-950" />
-                        <span>Give ${currentAmount > 0 ? currentAmount.toFixed(2) : '0.00'} {frequency === 'monthly' ? '/ Month' : 'Today'}</span>
-                      </>
-                    )}
-                  </button>
+                  {/* Submit / Action Button */}
+                  {paymentMethod === 'cash_app' ? (
+                    <a
+                      href={cashAppDirectUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => {
+                        fetch('/api/donations/square', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            donorName: donorName || 'Anonymous Believer',
+                            donorEmail: donorEmail || 'donor@aura.social',
+                            amount: currentAmount,
+                            designation,
+                            frequency,
+                            paymentMethod: 'cash_app',
+                            cardBrand: `Cash App (${formattedCashtag})`,
+                            note: note.trim() || undefined
+                          })
+                        })
+                          .then((res) => res.json())
+                          .then((data) => {
+                            if (data.donation) {
+                              setSuccessDonation(data.donation);
+                              fetchDonations();
+                            }
+                          })
+                          .catch(() => {});
+                      }}
+                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 transition-all active:scale-[0.98]"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>
+                        Open Cash App & Give ${currentAmount > 0 ? currentAmount.toFixed(2) : '0.00'} to {formattedCashtag}
+                      </span>
+                    </a>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || currentAmount <= 0}
+                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                    >
+                      {isSubmitting ? (
+                        <span>Authorizing Gift with Square...</span>
+                      ) : (
+                        <>
+                          <Heart className="w-4 h-4 fill-slate-950" />
+                          <span>Give ${currentAmount > 0 ? currentAmount.toFixed(2) : '0.00'} {frequency === 'monthly' ? '/ Month' : 'Today'}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 pt-1">
                     <Shield className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Safe & Secure 256-Bit SSL • Card processed by Square API</span>
+                    <span>Safe & Secure 256-Bit SSL • Cash App direct link & Square API encryption</span>
                   </div>
                 </form>
               )}
@@ -778,13 +825,13 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  Cash App Cashtag (e.g. $AuraSanctuary)
+                  Cash App Cashtag (e.g. $LightsOutHoldingLLC)
                 </label>
                 <input
                   type="text"
                   value={config.cashAppCashtag || ''}
                   onChange={(e) => setConfig({ ...config, cashAppCashtag: e.target.value })}
-                  placeholder="$AuraSanctuary"
+                  placeholder="$LightsOutHoldingLLC"
                   className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-400"
                 />
               </div>

@@ -18,9 +18,20 @@ export interface UserProfile {
   authProvider?: 'google' | 'email' | 'facebook' | 'github' | 'phone' | 'guest' | 'demo';
   hasPassword?: boolean;
   followingUserIds?: string[];
-  role?: 'member' | 'teacher' | 'admin';
+  role?: 'member' | 'leader' | 'director' | 'teacher' | 'admin';
+  position?: string;
   isAdmin?: boolean;
+  isDirector?: boolean;
+  isLeader?: boolean;
   isTeacher?: boolean;
+  permissions?: {
+    canEditCurriculum?: boolean;
+    canGradeWorkbooks?: boolean;
+    canManageMeetings?: boolean;
+    canUploadMedia?: boolean;
+    canPostAnnouncements?: boolean;
+    canManageMembers?: boolean;
+  };
 }
 
 export type MediaType = 'image' | 'video' | 'audio' | 'none';

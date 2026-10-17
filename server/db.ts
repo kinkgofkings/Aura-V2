@@ -19,6 +19,20 @@ export interface DBUser {
   googleId?: string;
   passwordHash?: string;
   authProvider?: 'google' | 'email' | 'guest' | 'demo';
+  role?: 'member' | 'leader' | 'director' | 'teacher' | 'admin';
+  position?: string;
+  isAdmin?: boolean;
+  isDirector?: boolean;
+  isLeader?: boolean;
+  isTeacher?: boolean;
+  permissions?: {
+    canEditCurriculum?: boolean;
+    canGradeWorkbooks?: boolean;
+    canManageMeetings?: boolean;
+    canUploadMedia?: boolean;
+    canPostAnnouncements?: boolean;
+    canManageMembers?: boolean;
+  };
 }
 
 export interface DBComment {
@@ -276,6 +290,36 @@ const SEED_USERS: DBUser[] = [
     isVerified: true,
     joinedAt: "2026-08-01",
     authProvider: "email",
+  },
+  {
+    id: "user_nick_director",
+    name: "Nick",
+    handle: "nick",
+    email: "nick@rurecovery.com",
+    avatarUrl: "https://api.dicebear.com/7.x/bottts/svg?seed=nick_ru_director",
+    bannerUrl: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200&auto=format&fit=crop&q=80",
+    bio: "Reformers Unanimous Director ✦ Guiding Overcomers into Freedom through Christ",
+    status: "online",
+    statusMessage: "RU Director • Available for Counsel",
+    followersCount: 12,
+    followingCount: 4,
+    isVerified: true,
+    joinedAt: "2026-08-01",
+    authProvider: "email",
+    role: "director",
+    position: "RU Director",
+    isDirector: true,
+    isLeader: true,
+    isTeacher: true,
+    isAdmin: false,
+    permissions: {
+      canEditCurriculum: true,
+      canGradeWorkbooks: true,
+      canManageMeetings: true,
+      canUploadMedia: true,
+      canPostAnnouncements: true,
+      canManageMembers: true
+    }
   },
 ];
 

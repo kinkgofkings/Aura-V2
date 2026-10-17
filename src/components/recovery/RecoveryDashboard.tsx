@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Sparkles, Heart, BookOpen, Music, Users, ArrowLeft, Pencil, Mic, Plus, GraduationCap } from 'lucide-react';
+import { Shield, Sparkles, Heart, BookOpen, Music, Users, ArrowLeft, Pencil, Mic, Plus, GraduationCap, Crown } from 'lucide-react';
 import { BiblicalPrinciples } from './BiblicalPrinciples';
 import { OvercomerWorkbookCourse } from './OvercomerWorkbookCourse';
 import { RecoveryAudioFeed } from './RecoveryAudioFeed';
@@ -260,14 +260,40 @@ export const RecoveryDashboard: React.FC = () => {
           <p className="text-sm sm:text-base text-slate-400 max-w-2xl leading-relaxed mb-3">
             Christ-centered deliverance and recovery. Journey through biblical principles, fellowship in live rooms, listen to teachings, and track your victorious walk in the Spirit.
           </p>
-          <button
-            onClick={() => setShowProposal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95"
-            title="Open Church Donation proposal to copy or share with your Pastor"
-          >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>🎁 Pastor Ministry Proposal (1-Tap Copy)</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowProposal(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95"
+              title="Open Church Donation proposal to copy or share with your Pastor"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>🎁 Pastor Ministry Proposal (1-Tap Copy)</span>
+            </button>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('open_giving_modal'))}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95"
+              title="Support Ministry via Cash App ($LightsOutHoldingLLC)"
+            >
+              <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+              <span>Give 🙏 Cash App $LightsOutHoldingLLC</span>
+            </button>
+
+            {(user?.role === 'admin' ||
+              user?.role === 'director' ||
+              user?.isAdmin ||
+              user?.isDirector ||
+              user?.handle?.toLowerCase() === 'tex' ||
+              user?.email?.toLowerCase().includes('lightsouttattootex')) && (
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('open_promote_leaders_modal'))}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95"
+                title="Manage leadership titles, positions, and permissions (Nick RU Director & Leaders)"
+              >
+                <Crown className="w-4 h-4 text-amber-400" />
+                <span>👑 Staff & Leadership Roles</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Dynamic Streak Widget */}

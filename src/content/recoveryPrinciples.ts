@@ -486,3 +486,246 @@ export const REFORMERS_UNANIMOUS_10_PRINCIPLES: RecoveryPrinciple[] = [
     affirmation: "I accept the blame, and God eliminates the guilt! I am forgiven, cleansed, and justified in Jesus Christ!"
   }
 ];
+
+export const RU_TEN_SPIRITUAL_PRINCIPLES: RecoveryPrinciple[] = [
+  {
+    step: 1,
+    title: "If God's against it, so am I!",
+    subtitle: "Abhor that which is evil; cleave to that which is good",
+    biblicalTheme: "Holy Alignment & Hatred for Sin",
+    scripture: {
+      reference: "Romans 12:9 & Psalm 97:10",
+      text: "Let love be without dissimulation. Abhor that which is evil; cleave to that which is good... Ye that love the LORD, hate evil: he preserveth the souls of his saints; he delivereth them out of the hand of the wicked."
+    },
+    summary: "True recovery does not negotiate with sin or compromise with destructive habits. When God speaks against a behavior in His Word, we take our stand with God against that sin, choosing to abhor what destroys our soul and cling to what is righteous.",
+    biblicalTruth: "You cannot conquer what you tolerate. Lasting freedom begins when you hate your sin as much as God hates what destroys your life.",
+    reflectionQuestions: [
+      "Are there areas where you still make excuses for your sin or treat it as a harmless coping mechanism?",
+      "What happens in your heart when you stop defending the sin and actively take God's side against it?",
+      "How does cultivating a biblical hatred for the consequences of sin protect you from future temptation?"
+    ],
+    actionSteps: [
+      "Name your sin, habit, or addiction honestly without euphemisms (call drunkenness drunkenness, lust lust).",
+      "Make a solemn pledge before God: 'Lord, if You are against it, I am against it.'",
+      "Remove any items, apps, or access points that enable you to compromise with what God opposes."
+    ],
+    prayer: "Lord God Almighty, align my heart with Your Word. Teach me to hate the things that crucify Your Son and destroy my soul. Give me the holy resolve to say: If God is against it, so am I. In Jesus' name, Amen.",
+    affirmation: "I stand with God against my sin. I hate what destroys me and cling to what is good."
+  },
+  {
+    step: 2,
+    title: "Every sin has its origin in our hearts.",
+    subtitle: "The internal battle before the external fall",
+    biblicalTheme: "The Deceitful Heart & Origin of Temptation",
+    scripture: {
+      reference: "Mark 7:20-23 & Jeremiah 17:9",
+      text: "And he said, That which cometh out of the man, that defileth the man. For from within, out of the heart of men, proceed evil thoughts, adulteries, fornications, murders, thefts, covetousness, wickedness, deceit, lasciviousness, an evil eye, blasphemy, pride, foolishness: All these evil things come from within, and defile the man."
+    },
+    summary: "Addiction is not simply an outward illness; it is a heart issue. Temptation finds a foothold because of the secret desires, resentments, and lusts cherished within our inner man before any external action takes place.",
+    biblicalTruth: "Circumstances and other people do not make you sin; they only reveal what was already hiding in your heart. When Jesus purifies your heart, your outward actions will follow.",
+    reflectionQuestions: [
+      "When you relapse or stumble, what emotional or spiritual desires were brewing in your heart days or hours before?",
+      "Have you blamed external stress, bad days, or other people for choices that actually began in your heart?",
+      "Are you willing to ask King Jesus to search the deep, hidden motives of your inner thoughts?"
+    ],
+    actionSteps: [
+      "Spend 10 minutes in silence asking the Holy Spirit to reveal unaddressed bitterness, lust, or self-pity in your heart.",
+      "Confess heart-level sins (jealousy, pride, discontentment) before they erupt into outward actions.",
+      "Memorize Psalm 139:23-24 to pray whenever your emotions begin to drift."
+    ],
+    prayer: "Create in me a clean heart, O God; and renew a right spirit within me. Search me, O God, and know my heart: try me, and know my thoughts: and lead me in the way everlasting. In Jesus' name, Amen.",
+    affirmation: "I guard my inner thoughts with diligence, because out of my heart flow the issues of life."
+  },
+  {
+    step: 3,
+    title: "It is easier to keep the heart clean than it is to clean it after it has been defiled.",
+    subtitle: "Daily prevention vs. painful restoration",
+    biblicalTheme: "Guarding the Gateways & Diligent Purity",
+    scripture: {
+      reference: "Proverbs 4:23 & Psalm 119:9",
+      text: "Keep thy heart with all diligence; for out of it are the issues of life... Wherewithal shall a young man cleanse his way? by taking heed thereto according to thy word."
+    },
+    summary: "Defilement brings sorrow, shame, and fractured fellowship with God and loved ones. Guarding your heart daily through the Word, prayer, and strict boundaries is infinitely easier than digging yourself out of the pit after a relapse.",
+    biblicalTruth: "Spiritual maintenance is always lighter than spiritual reconstruction. Protect your boundaries today so you don't spend tomorrow in tears of regret.",
+    reflectionQuestions: [
+      "What spiritual gates (eyes, ears, social circles) are you currently leaving unguarded?",
+      "How does the pain of yesterday's relapse compare to the small daily discipline of guarding your quiet time with God?",
+      "What practical boundary can you re-establish right now to keep your heart clean?"
+    ],
+    actionSteps: [
+      "Put accountability filters on your phone and electronic devices.",
+      "Begin every morning with Scripture before touching social media or news.",
+      "Walk away immediately the moment a conversation or situation begins to tilt toward worldly compromise."
+    ],
+    prayer: "Father, give me the wisdom to protect my heart today. I do not want to endure the grief of defilement. Help me take heed to Your Word and keep my mind anchored on things above. In Jesus' name, Amen.",
+    affirmation: "I protect my heart with all diligence today. Prevention in the Spirit is better than sorrow in the flesh."
+  },
+  {
+    step: 4,
+    title: "You cannot win a war when you're fighting on the wrong side.",
+    subtitle: "Choosing total allegiance to Christ over friendship with the world",
+    biblicalTheme: "Spiritual Warfare & Radical Allegiance",
+    scripture: {
+      reference: "James 4:4 & Romans 6:13",
+      text: "Ye adulterers and adulteresses, know ye not that the friendship of the world is enmity with God? whosoever therefore will be a friend of the world is the enemy of God... Neither yield ye your members as instruments of unrighteousness unto sin: but yield yourselves unto God."
+    },
+    summary: "You cannot conquer addiction while secretly defending worldly friendships, toxic associations, and ungodly entertainment. To defeat the enemy, you must stop consorting with him and yield your total allegiance to Jesus Christ.",
+    biblicalTruth: "Divided loyalty guarantees defeat. When you surrender completely to Christ's army, you have all of Heaven's power backing you.",
+    reflectionQuestions: [
+      "Are there old friendships, hangouts, or habits you are defending while praying for God to deliver you?",
+      "Why is attempting to keep 'one foot in the church and one foot in the world' the fastest recipe for failure?",
+      "What does yielding yourself fully to God look like for your schedule this week?"
+    ],
+    actionSteps: [
+      "Cut ties with drug, alcohol, or immorality connections; delete numbers and block negative influences.",
+      "Replace ungodly media and music with worship, sound preaching, and edifying recovery testimonies.",
+      "Enlist a trusted spiritual battle buddy in the RU ministry to keep you accountable."
+    ],
+    prayer: "Lord Jesus, I switch sides completely. I renounce the friendship of the world and the deceitful pleasures of sin. I yield my body, mind, and time as instruments of righteousness for Your kingdom. Amen.",
+    affirmation: "I fight under the banner of Christ Jesus. I do not defend the enemy who sought to destroy my life."
+  },
+  {
+    step: 5,
+    title: "It is not about stopping a bad habit; it is about developing a walk with God.",
+    subtitle: "The expulsive power of a new, holy affection",
+    biblicalTheme: "Walking in the Spirit & Abiding in Christ",
+    scripture: {
+      reference: "Galatians 5:16 & John 15:5",
+      text: "This I say then, Walk in the Spirit, and ye shall not fulfil the lust of the flesh... I am the vine, ye are the branches: He that abideth in me, and I in him, the same bringeth forth much fruit: for without me ye can do nothing."
+    },
+    summary: "White-knuckle sobriety leaves an empty void that the flesh will eventually crave to fill. Biblical recovery is not just the subtraction of a bad habit; it is the joyful addition of an intimate, daily devotional relationship with God.",
+    biblicalTruth: "You do not defeat darkness by fighting it with bare fists; you defeat darkness by turning on the light. When Christ fills your heart, there is no room left for the counterfeit pleasures of sin.",
+    reflectionQuestions: [
+      "Have you been trying to 'just stop doing it' through sheer willpower rather than falling in love with Jesus?",
+      "When you spend quality time praying and reading Scripture, how does it change your appetite for old sins?",
+      "What is your daily plan for walking with God every morning, noon, and evening?"
+    ],
+    actionSteps: [
+      "Establish a consistent 15-30 minute morning devotional time with an open Bible and prayer journal.",
+      "Practice the presence of God throughout your workday with brief prayers and Scripture meditation.",
+      "Attend your weekly RU recovery meeting with eager anticipation to learn and fellowship."
+    ],
+    prayer: "Lord Jesus, I do not want an empty life of mere rule-following. I want You! Teach me to abide in the Vine daily. Fill my thirst with living water so that the broken cisterns of this world lose all their appeal. Amen.",
+    affirmation: "My goal is not merely sobriety; my goal is an intimate walk with the Living God!"
+  },
+  {
+    step: 6,
+    title: "We are transformed by the renewing of our mind, not by the removal of our problems.",
+    subtitle: "Inner transformation over outward circumstance",
+    biblicalTheme: "The Renewed Mind & Biblical Perspective",
+    scripture: {
+      reference: "Romans 12:2 & Philippians 4:8",
+      text: "And be not conformed to this world: but be ye transformed by the renewing of your mind, that ye may prove what is that good, and acceptable, and perfect, will of God... Finally, brethren, whatsoever things are true, whatsoever things are honest, whatsoever things are just... think on these things."
+    },
+    summary: "God does not promise to remove all stress, difficult people, or hardship from your life. True transformation happens when God changes your mind and perspective, enabling you to respond with Christlike grace and patience under any circumstance.",
+    biblicalTruth: "When your mind is saturated with God's Truth, problems become platforms to display God's supernatural power and peace.",
+    reflectionQuestions: [
+      "Do you pray more for your problems to disappear than for your mind to be transformed to handle them God's way?",
+      "What worldly thought patterns (victimhood, fear, despair, entitlement) need to be renewed by Scripture?",
+      "How can Romans 12:2 change your reaction the next time you face unexpected hardship?"
+    ],
+    actionSteps: [
+      "Identify the primary negative thoughts you replay daily, and write down two Scriptures that refute each one.",
+      "Commit 1 Scripture verse to memory each week from the Overcomer workbook.",
+      "When stress arrives, pause and ask: 'How does Jesus see this situation, and what would faith do right now?'"
+    ],
+    prayer: "Holy Father, renew my mind. Wash away the old tape recordings of worldly fear, self-pity, and anger. Replace them with the living promises of Your Word. Transform my inner perspective today. In Jesus' name, Amen.",
+    affirmation: "I am being transformed by the renewing of my mind. In Christ, I have peace in every storm."
+  },
+  {
+    step: 7,
+    title: "Those who do not love the truth are susceptible to believing a lie.",
+    subtitle: "The protection of truth against Satan's deceptions",
+    biblicalTheme: "Love of the Truth & Freedom from Deception",
+    scripture: {
+      reference: "2 Thessalonians 2:10-12 & John 8:32",
+      text: "And with all deceivableness of unrighteousness in them that perish; because they received not the love of the truth, that they might be saved... And ye shall know the truth, and the truth shall make you free."
+    },
+    summary: "The enemy's greatest weapon is deception. When a person rejects or compromises with God's plain truth, their spiritual discernment becomes blind, and they become gullible to believing lies like 'I can handle one drink' or 'Nobody will ever know.'",
+    biblicalTruth: "You cannot remain neutral toward the Truth. If you do not actively love, seek, and obey the Truth, you will inevitably fall prey to the enemy's flattering lies.",
+    reflectionQuestions: [
+      "What lies has the enemy whispered to you right before your past relapses?",
+      "Is there any truth in the Bible or from your leaders that you have been resisting or avoiding?",
+      "How does developing a genuine love for truth protect your future and your family?"
+    ],
+    actionSteps: [
+      "Speak the absolute truth in all conversations—no exaggerations, half-truths, or hidden secrets.",
+      "Seek out godly counsel from your RU Director and Leaders rather than isolated thinking.",
+      "Test every thought against the written Word of God: 'Does this thought match Scripture?'"
+    ],
+    prayer: "Lord God of Truth, grant me a passionate love for Your Truth. Deliver me from self-deception and the smooth lies of the enemy. Let Your Truth be the shield and buckler that preserves my soul. Amen.",
+    affirmation: "I love the Truth of God's Word. The Truth exposes every lie and sets me completely free!"
+  },
+  {
+    step: 8,
+    title: "You will never be free from what you justify.",
+    subtitle: "Ending rationalization and taking full responsibility",
+    biblicalTheme: "Sincere Confession & Radical Honesty",
+    scripture: {
+      reference: "Proverbs 28:13 & Luke 16:15",
+      text: "He that covereth his sins shall not prosper: but whoso confesseth and forsaketh them shall have mercy... And he said unto them, Ye are they which justify yourselves before men; but God knoweth your hearts: for that which is highly esteemed among men is abomination in the sight of God."
+    },
+    summary: "Justification is the enemy of sanctification. As long as you make excuses for your behavior—blaming your past, your spouse, your biology, or your stress—you give sin legal permission to remain in your life. Freedom demands radical, unreserved ownership.",
+    biblicalTruth: "Mercy is promised to those who confess and forsake, not to those who defend and excuse. When you stop defending your sin, God starts defending you.",
+    reflectionQuestions: [
+      "What excuses have you historically used to justify your addictive urges or sinful outbursts?",
+      "Why is saying 'I had a rough childhood' or 'I was under too much stress' a trap that keeps you in bondage?",
+      "What relief comes when you finally drop all defenses and simply say: 'I was wrong; please forgive me'?"
+    ],
+    actionSteps: [
+      "Write down every excuse you have made in the last month and strike it out with a red pen.",
+      "Practice saying out loud without any 'buts': 'I chose this sin, and I take 100% personal responsibility.'",
+      "Go to anyone you have blamed unfairly and apologize with genuine humility."
+    ],
+    prayer: "Lord, I strip away every defense and excuse. I will not justify my sin or blame others for my choices. I own my actions completely before You. Forgive me, cleanse me, and teach me truth in my inward parts. Amen.",
+    affirmation: "I refuse to justify sin. I confess it, forsake it, and walk in God's abundant mercy."
+  },
+  {
+    step: 9,
+    title: "God balances guilty feelings with personal blame. When we accept the blame, God removes the guilt.",
+    subtitle: "The divine exchange of the Cross",
+    biblicalTheme: "Biblical Guilt vs. Worldly Blame-Shifting",
+    scripture: {
+      reference: "Psalm 32:5 & 1 John 1:9",
+      text: "I acknowledged my sin unto thee, and mine iniquity have I not hid. I said, I will confess my transgressions unto the LORD; and thou forgavest the iniquity of my sin... If we confess our sins, he is faithful and just to forgive us our sins, and to cleanse us from all unrighteousness."
+    },
+    summary: "Guilt is not a chemical imbalance or a cruel emotion; it is God's divine alarm system alerting you to personal transgression. The world tells you to suppress guilt or blame someone else. But God's economy is beautiful: when you accept the blame, God washes away the guilt by the blood of Christ!",
+    biblicalTruth: "Blame-shifting preserves guilt. Personal confession releases divine forgiveness. When blame is placed on your account before God, the sacrifice of Christ pays the debt in full.",
+    reflectionQuestions: [
+      "Have you been carrying years of lingering guilt because you never fully took the blame before God?",
+      "How does 1 John 1:9 promise not just forgiveness, but total cleansing from all unrighteousness?",
+      "What does it feel like to know that Jesus paid the full debt for every blame you confess?"
+    ],
+    actionSteps: [
+      "Bring your deepest, most shameful failure to the foot of the Cross right now in private prayer.",
+      "Confess: 'Lord, I am to blame. I did it. Wash me with the precious blood of Jesus.'",
+      "Thank God out loud for removing your guilt as far as the east is from the west (Psalm 103:12)."
+    ],
+    prayer: "Precious Savior, thank You for taking the punishment for my guilt upon Calvary. I stop running from the blame. I bring my sins to You and receive Your total cleansing. My guilt is gone because Your blood is enough! Amen.",
+    affirmation: "I accepted the blame, and God removed the guilt! There is no condemnation for me in Christ Jesus!"
+  },
+  {
+    step: 10,
+    title: "The closer we get to Jesus, the smaller our problems will appear.",
+    subtitle: "The supremacy and sufficiency of Christ",
+    biblicalTheme: "Christ-Centered Victory & Fixation on the King",
+    scripture: {
+      reference: "Hebrews 12:1-2 & Colossians 3:1-3",
+      text: "Wherefore seeing we also are compassed about with so great a cloud of witnesses, let us lay aside every weight, and the sin which doth so easily beset us... Looking unto Jesus the author and finisher of our faith... Set your affection on things above, not on things on the earth. For ye are dead, and your life is hid with Christ in God."
+    },
+    summary: "When you stare at your addiction, cravings, or circumstances, they look like insurmountable giants. But when you fix your gaze on Jesus Christ in worship, prayer, and fellowship, His infinite majesty dwarfs every mountain in your path. Christ is your complete answer!",
+    biblicalTruth: "The battle of recovery is won by fixing your eyes on the King of kings. What was impossible in your flesh is easily crushed under the feet of the Lord Jesus Christ.",
+    reflectionQuestions: [
+      "When you spend your day focused on your cravings, do they get bigger or smaller?",
+      "How does praising Jesus, listening to biblical preaching, and reading His Word shrink the power of temptation?",
+      "Are you ready to make Jesus Christ the supreme affection and treasure of your entire life?"
+    ],
+    actionSteps: [
+      "When temptation strikes, do not debate with it; immediately begin singing a hymn or praying Scripture out loud.",
+      "Memorize Hebrews 12:2 and repeat it whenever fear or anxiety tries to creep into your heart.",
+      "Share with someone this week how close fellowship with Jesus has given you victory over strongholds."
+    ],
+    prayer: "Lord Jesus, You are my Deliverer, my Shepherd, and my King. I look away from my weakness and look unto You. Draw me close to Your heart. In Your holy presence, every chain falls off and every mountain is cast into the sea. Amen!",
+    affirmation: "The closer I get to Jesus, the smaller my problems appear! Christ is my Victory, now and forever!"
+  }
+];

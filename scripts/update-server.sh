@@ -51,6 +51,11 @@ if [ -d "assets" ]; then
     cp -f assets/icon.png public/icon.png
     cp -f assets/icon.png public/assets/icon.png 2>/dev/null || true
   fi
+  if [ -f "assets/app-icon.jpg" ]; then
+    echo "  -> Syncing app-icon.jpg to public/ and public/assets/"
+    cp -f assets/app-icon.jpg public/app-icon.jpg
+    cp -f assets/app-icon.jpg public/assets/app-icon.jpg 2>/dev/null || true
+  fi
   if [ -f "assets/splashscreen.png" ]; then
     echo "  -> Syncing splashscreen.png to public/ and public/assets/"
     cp -f assets/splashscreen.png public/splashscreen.png

@@ -63,7 +63,20 @@ interface AuthContextType {
   setUserStatus: (status: UserStatus, statusMessage?: string) => Promise<void>;
   getUserById: (id: string) => UserProfile | undefined;
   followUser: (targetUserId: string) => Promise<boolean>;
-  promoteUserRole: (targetUserId: string, newRole: 'member' | 'teacher' | 'admin') => Promise<{ success: boolean; error?: string }>;
+  promoteUserRole: (
+    targetUserId: string,
+    newRole: 'member' | 'leader' | 'director' | 'teacher' | 'admin',
+    position?: string,
+    permissions?: UserProfile['permissions']
+  ) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
+  provisionLeader: (leaderData: {
+    name: string;
+    email: string;
+    handle?: string;
+    role?: 'member' | 'leader' | 'director' | 'teacher' | 'admin';
+    position?: string;
+    permissions?: UserProfile['permissions'];
+  }) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
   
   isOnline: boolean;
   isServerConnected: boolean;
@@ -734,15 +747,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
-  const promoteUserRole = async (targetUserId: string, newRole: 'member' | 'teacher' | 'admin') => {
+  const promoteUserRole = async (
+    targetUserId: string,
+    newRole: 'member' | 'leader' | 'director' | 'teacher' | 'admin',
+    position?: string,
+    permissions?: UserProfile['permissions']
+  ) => {
     try {
       const res = await fetch(`/api/users/${encodeURIComponent(targetUserId)}/role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: newRole }),
+        body: JSON.stringify({ role: newRole, position, permissions }),
       });
       const data = await res.json();
       if (!res.ok) return { success: false, error: data.error || 'Failed to update user role' };
+
+      const isDirector = newRole === 'director' || (position && position.toLowerCase().includes('director'));
+      const isLeader = newRole === 'leader' || isDirector || newRole === 'admin' || newRole === 'teacher';
+      const isTeacher = newRole === 'teacher' || isDirector || newRole === 'admin' || isLeader;
+      const isAdmin = newRole === 'admin';
 
       // Update in allUsers list
       setAllUsers((prev) =>
@@ -750,9 +773,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           u.id === targetUserId
             ? {
                 ...u,
+                ...data,
                 role: newRole,
-                isTeacher: newRole === 'teacher' || newRole === 'admin',
-                isAdmin: newRole === 'admin',
+                position: position !== undefined ? position : u.position,
+                isDirector,
+                isLeader,
+                isTeacher,
+                isAdmin,
+                permissions: permissions || data.permissions || u.permissions,
               }
             : u
         )
@@ -762,16 +790,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user && user.id === targetUserId) {
         const updatedSelf: UserProfile = {
           ...user,
+          ...data,
           role: newRole,
-          isTeacher: newRole === 'teacher' || newRole === 'admin',
-          isAdmin: newRole === 'admin',
+          position: position !== undefined ? position : user.position,
+          isDirector,
+          isLeader,
+          isTeacher,
+          isAdmin,
+          permissions: permissions || data.permissions || user.permissions,
         };
         setUserAndCache(updatedSelf);
       }
 
-      return { success: true };
+      return { success: true, user: data };
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to update user role' };
+    }
+  };
+
+  const provisionLeader = async (leaderData: {
+    name: string;
+    email: string;
+    handle?: string;
+    role?: 'member' | 'leader' | 'director' | 'teacher' | 'admin';
+    position?: string;
+    permissions?: UserProfile['permissions'];
+  }) => {
+    try {
+      const res = await fetch('/api/users/provision-leader', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(leaderData),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || 'Failed to provision leader' };
+
+      if (data.user) {
+        setAllUsers((prev) => {
+          const exists = prev.some((u) => u.id === data.user.id || u.email === data.user.email);
+          if (exists) {
+            return prev.map((u) => (u.id === data.user.id || u.email === data.user.email ? { ...u, ...data.user } : u));
+          }
+          return [...prev, data.user];
+        });
+      }
+
+      return { success: true, user: data.user };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to provision leader' };
     }
   };
 
@@ -782,7 +848,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signInWithGoogle, signInWithFacebook, signInWithGithub,
       sendVerificationEmail, resetPassword,
       setupRecaptcha, sendPhoneCode, verifyPhoneCode,
-      updateProfile, setUserStatus, getUserById, followUser, promoteUserRole,
+      updateProfile, setUserStatus, getUserById, followUser, promoteUserRole, provisionLeader,
       isOnline, isServerConnected
     }}>
       {children}

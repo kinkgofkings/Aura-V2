@@ -308,20 +308,113 @@ async function startServer() {
     res.json(result);
   });
 
-  // Promote users to admin or teacher
+  // Promote & customize leadership roles, titles, and permissions
   app.post('/api/users/:id/role', (req, res) => {
-    const { role } = req.body;
-    if (!role || !['member', 'teacher', 'admin'].includes(role)) {
-      return res.status(400).json({ error: 'Valid role required (member, teacher, admin)' });
+    const { role, position, permissions } = req.body;
+    const validRoles = ['member', 'leader', 'director', 'teacher', 'admin'];
+    if (role && !validRoles.includes(role)) {
+      return res.status(400).json({ error: `Valid role required (${validRoles.join(', ')})` });
     }
-    const updated = db.updateUser(req.params.id, {
-      role,
-      isTeacher: role === 'teacher' || role === 'admin',
-      isAdmin: role === 'admin'
-    } as any);
+
+    const isDirector = role === 'director' || (typeof position === 'string' && position.toLowerCase().includes('director'));
+    const isAdmin = role === 'admin' || req.params.id === 'user_tex' || req.params.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1';
+    const isLeader = role === 'leader' || isDirector || isAdmin || role === 'teacher';
+    const isTeacher = role === 'teacher' || isDirector || isAdmin || isLeader;
+
+    const defaultPermissions = {
+      canEditCurriculum: isDirector || isAdmin,
+      canGradeWorkbooks: isLeader || isDirector || isAdmin || isTeacher,
+      canManageMeetings: isLeader || isDirector || isAdmin,
+      canUploadMedia: isLeader || isDirector || isAdmin || isTeacher,
+      canPostAnnouncements: isLeader || isDirector || isAdmin,
+      canManageMembers: isDirector || isAdmin
+    };
+
+    const mergedPermissions = {
+      ...defaultPermissions,
+      ...(permissions || {})
+    };
+
+    const updates: any = {};
+    if (role) updates.role = role;
+    if (position !== undefined) updates.position = position;
+    if (permissions !== undefined) updates.permissions = mergedPermissions;
+    updates.isDirector = isDirector;
+    updates.isLeader = isLeader;
+    updates.isTeacher = isTeacher;
+    updates.isAdmin = isAdmin;
+
+    const updated = db.updateUser(req.params.id, updates);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     const { passwordHash, ...safeUser } = updated;
     res.json(safeUser);
+  });
+
+  // Provision or pre-register a leader (e.g. Nick RU Director) before they log in
+  app.post('/api/users/provision-leader', (req, res) => {
+    try {
+      const { name, email, handle, position, role = 'director', permissions } = req.body;
+      if (!name || !email) {
+        return res.status(400).json({ error: 'Name and email are required to provision a leader' });
+      }
+
+      const existingUser = db.getUserByEmail(email) || (handle ? db.getUserByHandle(handle) : null);
+      const isDirector = role === 'director' || (position && position.toLowerCase().includes('director'));
+      const isLeader = role === 'leader' || isDirector || role === 'admin' || role === 'teacher';
+
+      const mergedPermissions = {
+        canEditCurriculum: isDirector || role === 'admin',
+        canGradeWorkbooks: true,
+        canManageMeetings: true,
+        canUploadMedia: true,
+        canPostAnnouncements: true,
+        canManageMembers: isDirector || role === 'admin',
+        ...(permissions || {})
+      };
+
+      if (existingUser) {
+        const updated = db.updateUser(existingUser.id, {
+          role,
+          position: position || (isDirector ? 'RU Director' : 'Recovery Leader'),
+          isDirector,
+          isLeader,
+          isTeacher: true,
+          isAdmin: role === 'admin',
+          permissions: mergedPermissions
+        } as any);
+        return res.json({ success: true, user: updated });
+      }
+
+      const cleanHandle = (handle || name.toLowerCase().replace(/[^a-z0-9]/g, '') || `leader_${Date.now()}`).toLowerCase();
+      const newLeader = db.createUser({
+        name,
+        handle: cleanHandle,
+        email: email.toLowerCase(),
+        bio: `${position || 'Ministry Leader'} ✦ Reformers Unanimous`,
+        avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanHandle)}`,
+        authProvider: 'email',
+        status: 'online',
+        statusMessage: position || 'Available for Counsel',
+        followersCount: 0,
+        followingCount: 0,
+        isVerified: true
+      });
+
+      const updated = db.updateUser(newLeader.id, {
+        role,
+        position: position || (isDirector ? 'RU Director' : 'Recovery Leader'),
+        isDirector,
+        isLeader,
+        isTeacher: true,
+        isAdmin: role === 'admin',
+        permissions: mergedPermissions
+      } as any);
+
+      res.status(201).json({ success: true, user: updated });
+    } catch (err: any) {
+      console.error('Failed to provision leader:', err);
+      res.status(500).json({ error: err.message || 'Failed to provision leader' });
+    }
   });
 
   // --- OVERCOMER WORKBOOK & MULTI-BOOK CURRICULUM ROUTES ---

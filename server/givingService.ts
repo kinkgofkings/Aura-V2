@@ -11,7 +11,7 @@ export class GivingService {
   private config: GivingConfig = {
     ministryName: 'Aura Sanctuary & Recovery Ministries',
     taxExemptNotice: 'Thank you for your generous tax-deductible kingdom support. "God loveth a cheerful giver." (2 Cor 9:7)',
-    cashAppCashtag: '$AuraSanctuary',
+    cashAppCashtag: '$LightsOutHoldingLLC',
     squareAppId: 'sandbox-sq0idb-AuraMinistryLive',
     squareLocationId: 'L8J4V9W2G0',
   };

@@ -166,8 +166,8 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
                 <Heart className="w-4 h-4 text-amber-400 fill-amber-400 group-hover:scale-110 transition-transform" />
                 <span>Give 🙏 Support Ministry</span>
               </div>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-500 text-slate-950 uppercase">
-                Square
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500 text-slate-950 uppercase tracking-tight">
+                Cash App $LightsOutHoldingLLC
               </span>
             </button>
 
