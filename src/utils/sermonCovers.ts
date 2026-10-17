@@ -185,27 +185,31 @@ export function getSermonCoverImage(
   },
   index = 0
 ): string {
-  // 1. If sermon has a YouTube video ID (or mediaUrl containing an 11-char YouTube ID, or yt- ID prefix),
-  // return the actual real YouTube sermon video thumbnail!
-  const ytMatch = (sermon?.mediaUrl || '').match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-  const ytId =
-    sermon?.youtubeId ||
-    ytMatch?.[1] ||
-    (sermon?.id && sermon.id.startsWith('yt-') ? sermon.id.replace('yt-', '') : undefined) ||
-    (sermon?.mediaUrl && sermon.mediaUrl.length === 11 ? sermon.mediaUrl : undefined);
+  // 1. If sermon has a YouTube video ID or mediaUrl/thumbnailUrl containing an 11-char YouTube ID,
+  // return the actual real YouTube sermon video cover!
+  const mediaYtMatch = (sermon?.mediaUrl || '').match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  const thumbYtMatch = (sermon?.thumbnailUrl || '').match(/(?:vi\/|vi_webp\/)([\w-]{11})/);
 
-  if (ytId && ytId.length === 11 && !ytId.includes('.')) {
-    return `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`;
+  const rawYtId =
+    sermon?.youtubeId ||
+    mediaYtMatch?.[1] ||
+    thumbYtMatch?.[1] ||
+    (sermon?.id && sermon.id.startsWith('yt-') ? sermon.id.replace('yt-', '') : undefined) ||
+    (sermon?.id && sermon.id.length === 11 && !sermon.id.includes('.') && !sermon.id.includes(' ') && !sermon.id.includes('_') ? sermon.id : undefined) ||
+    (sermon?.mediaUrl && sermon.mediaUrl.length === 11 && !sermon.mediaUrl.includes('/') ? sermon.mediaUrl : undefined);
+
+  if (rawYtId && rawYtId.length === 11 && !rawYtId.includes('.')) {
+    return `https://i.ytimg.com/vi/${rawYtId}/hqdefault.jpg`;
   }
 
   // 2. If sermon already has a valid custom uploaded image or non-repetitive thumbnail, use it
-  if (sermon?.thumbnailUrl) {
+  if (sermon?.thumbnailUrl && typeof sermon.thumbnailUrl === 'string' && sermon.thumbnailUrl.trim().length > 0) {
     const isRepetitiveHeadshot = 
       sermon.thumbnailUrl.includes('photo-1472099645785-5658abf4ff4e') ||
       sermon.thumbnailUrl.includes('photo-1519085360753-af0119f7cbe7') ||
       sermon.thumbnailUrl.includes('photo-1507003211169-0a1dd7228f2d');
     
-    if (!isRepetitiveHeadshot && !sermon.thumbnailUrl.endsWith('/')) {
+    if (!isRepetitiveHeadshot && !sermon.thumbnailUrl.endsWith('/') && !sermon.thumbnailUrl.startsWith('data:')) {
       return sermon.thumbnailUrl;
     }
   }

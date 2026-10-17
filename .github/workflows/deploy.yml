@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy / update'
+        required: false
+        default: 'Manual trigger from GitHub Actions'
 
 concurrency:
   group: aura-prod
@@ -12,20 +17,31 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy to Aura-prod
+    name: Deploy to Aura Server
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Server Update & Build
+      - name: Trigger Server Update & Rebuild
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.SERVER_HOST || '54.80.229.108' }}
           username: ${{ secrets.SERVER_USER || 'ubuntu' }}
           key: ${{ secrets.AURA_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 20m
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE || '' }}
+          command_timeout: 30m
           script: |
             set -euo pipefail
-            echo "🚀 [Deploy] Triggered by GitHub push to main"
+            echo "=================================================="
+            echo "🚀 [Deploy] Triggered for Aura-prod on $(date)"
+            echo "=================================================="
             cd /home/ubuntu/Aura-prod
+            
+            # Ensure script permissions
             chmod +x scripts/*.sh 2>/dev/null || true
+            
+            # Run the server update and rebuild script
             ./scripts/update-server.sh
-            echo "✅ [Deploy] Server update completed successfully!"
+            
+            echo "=================================================="
+            echo "✅ [Deploy] Aura updated, compiled, and restarted!"
+            echo "=================================================="

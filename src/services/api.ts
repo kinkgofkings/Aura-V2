@@ -15,6 +15,9 @@ class ApiService {
   private isServerAvailable: boolean = true;
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
     try {
       const base = getApiBase();
       const url = `${base}${endpoint}`;
@@ -23,8 +26,11 @@ class ApiService {
           "Content-Type": "application/json",
           ...options.headers,
         },
+        signal: controller.signal,
         ...options,
       });
+
+      clearTimeout(timeout);
 
       if (!res.ok) {
         console.warn(`[API] Request failed on ${endpoint}: ${res.status} ${res.statusText}`);
@@ -34,9 +40,35 @@ class ApiService {
       this.isServerAvailable = true;
       return (await res.json()) as T;
     } catch (err) {
+      clearTimeout(timeout);
       this.isServerAvailable = false;
       return null;
     }
+  }
+
+  public async uploadFile(file: File | Blob, filename?: string): Promise<{ url: string } | null> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file, filename || (file instanceof File ? file.name : 'upload.jpg'));
+      const base = getApiBase();
+      const res = await fetch(`${base}/upload`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const json = await res.json();
+        return json;
+      }
+    } catch (e) {
+      clearTimeout(timeout);
+      console.warn('File upload failed, falling back:', e);
+    }
+    return null;
   }
 
   // --- Users & Auth ---

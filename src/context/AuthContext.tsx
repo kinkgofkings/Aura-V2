@@ -63,6 +63,7 @@ interface AuthContextType {
   setUserStatus: (status: UserStatus, statusMessage?: string) => Promise<void>;
   getUserById: (id: string) => UserProfile | undefined;
   followUser: (targetUserId: string) => Promise<boolean>;
+  promoteUserRole: (targetUserId: string, newRole: 'member' | 'teacher' | 'admin') => Promise<{ success: boolean; error?: string }>;
   
   isOnline: boolean;
   isServerConnected: boolean;
@@ -733,6 +734,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
+  const promoteUserRole = async (targetUserId: string, newRole: 'member' | 'teacher' | 'admin') => {
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(targetUserId)}/role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || 'Failed to update user role' };
+
+      // Update in allUsers list
+      setAllUsers((prev) =>
+        prev.map((u) =>
+          u.id === targetUserId
+            ? {
+                ...u,
+                role: newRole,
+                isTeacher: newRole === 'teacher' || newRole === 'admin',
+                isAdmin: newRole === 'admin',
+              }
+            : u
+        )
+      );
+
+      // If updating current logged in user
+      if (user && user.id === targetUserId) {
+        const updatedSelf: UserProfile = {
+          ...user,
+          role: newRole,
+          isTeacher: newRole === 'teacher' || newRole === 'admin',
+          isAdmin: newRole === 'admin',
+        };
+        setUserAndCache(updatedSelf);
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to update user role' };
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user, allUsers, isAuthModalOpen, setIsAuthModalOpen, openAuthModal,
@@ -740,7 +782,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signInWithGoogle, signInWithFacebook, signInWithGithub,
       sendVerificationEmail, resetPassword,
       setupRecaptcha, sendPhoneCode, verifyPhoneCode,
-      updateProfile, setUserStatus, getUserById, followUser,
+      updateProfile, setUserStatus, getUserById, followUser, promoteUserRole,
       isOnline, isServerConnected
     }}>
       {children}

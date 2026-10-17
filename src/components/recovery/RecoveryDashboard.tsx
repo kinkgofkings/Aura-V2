@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Sparkles, Heart, BookOpen, Music, Users, ArrowLeft, Pencil, Mic , Plus } from 'lucide-react';
+import { Shield, Sparkles, Heart, BookOpen, Music, Users, ArrowLeft, Pencil, Mic, Plus, GraduationCap } from 'lucide-react';
 import { BiblicalPrinciples } from './BiblicalPrinciples';
+import { OvercomerWorkbookCourse } from './OvercomerWorkbookCourse';
 import { RecoveryAudioFeed } from './RecoveryAudioFeed';
 import { RecoveryJournal } from './RecoveryJournal';
 import { MeetingCountdownTimer } from './MeetingCountdownTimer';
@@ -9,16 +10,17 @@ import { GroupWall } from './GroupWall';
 import { RecoveryMeeting } from '../../types/recovery';
 import { useAuth } from '../../context/AuthContext';
 import { PastorProposalModal } from './PastorProposalModal';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
 export const RecoveryDashboard: React.FC = () => {
   const { user, updateProfile } = useAuth();
   const [showProposal, setShowProposal] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'principles' | 'audio' | 'journal' | 'groups'>(() => {
+  const [activeTab, setActiveTab] = useState<'principles' | 'workbook' | 'audio' | 'journal' | 'groups'>(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const rtabParam = urlParams.get('rtab');
-      if (rtabParam && ['principles', 'audio', 'journal', 'groups'].includes(rtabParam)) {
+      if (rtabParam && ['principles', 'workbook', 'audio', 'journal', 'groups'].includes(rtabParam)) {
         return rtabParam as any;
       }
       const saved = localStorage.getItem('aura_recovery_tab');
@@ -325,7 +327,19 @@ export const RecoveryDashboard: React.FC = () => {
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          Biblical Principles
+          10 Spiritual Principles
+        </button>
+
+        <button
+          onClick={() => setActiveTab('workbook')}
+          className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold whitespace-nowrap transition-all shadow-sm ${
+            activeTab === 'workbook'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-500/30 scale-105'
+              : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30'
+          }`}
+        >
+          <GraduationCap className="w-4 h-4" />
+          Overcomer Workbook (Full Book)
         </button>
 
         <button
@@ -416,6 +430,7 @@ export const RecoveryDashboard: React.FC = () => {
       {/* Content Area */}
       <div className="min-h-[500px]">
         {activeTab === 'principles' && <BiblicalPrinciples />}
+        {activeTab === 'workbook' && <OvercomerWorkbookCourse />}
         {activeTab === 'journal' && <RecoveryJournal />}
         {activeTab === 'audio' && <RecoveryAudioFeed />}
         {activeTab === 'groups' && (

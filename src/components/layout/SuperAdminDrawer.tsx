@@ -20,7 +20,9 @@ import {
   RefreshCw,
   Zap,
   Database,
-  UploadCloud
+  UploadCloud,
+  Crown,
+  DollarSign
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
@@ -117,6 +119,7 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
         {/* Navigation & Tools Sections */}
         <div className="mt-4 space-y-3 flex-1">
           {/* Admin Studio */}
+          {/* Admin Studio & Staff Management */}
           {isTexAdmin && (
             <div className="space-y-1">
               <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400 px-2 mb-1.5">
@@ -129,14 +132,69 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
                 <Sparkles className="w-4 h-4 text-amber-400" />
                 <span>Master Studio & Course Builder</span>
               </button>
+
+              <button
+                onClick={() =>
+                  handleAction(() => {
+                    window.dispatchEvent(new CustomEvent('open_promote_leaders_modal'));
+                  })
+                }
+                className="w-full flex items-center gap-2.5 p-2.5 rounded-xl bg-amber-600/10 border border-amber-500/20 text-amber-300 hover:bg-amber-600/20 transition-all text-xs font-semibold"
+              >
+                <Crown className="w-4 h-4 text-amber-400" />
+                <span>Promote Leaders & Staff (Admins / Teachers)</span>
+              </button>
             </div>
           )}
 
           {/* Quick Inspirations & Tools */}
           <div className="space-y-1">
             <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400 px-2 mb-1.5">
-              Spiritual & Daily Tools
+              Spiritual & Kingdom Giving
             </p>
+
+            {/* Give 🙏 Section */}
+            <button
+              onClick={() =>
+                handleAction(() => {
+                  window.dispatchEvent(new CustomEvent('open_giving_modal'));
+                })
+              }
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-600/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 transition-all text-xs font-bold shadow-md shadow-amber-500/10 group"
+            >
+              <div className="flex items-center gap-2.5">
+                <Heart className="w-4 h-4 text-amber-400 fill-amber-400 group-hover:scale-110 transition-transform" />
+                <span>Give 🙏 Support Ministry</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-500 text-slate-950 uppercase">
+                Square
+              </span>
+            </button>
+
+            {/* Overcomer Workbook */}
+            <button
+              onClick={() =>
+                handleAction(() => {
+                  try {
+                    localStorage.setItem('aura_recovery_tab', 'workbook');
+                  } catch {}
+                  onNavigateTab?.('recovery');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('switch_recovery_tab', { detail: { tab: 'workbook' } }));
+                  }, 50);
+                })
+              }
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 hover:bg-amber-500/20 transition-all text-xs font-bold"
+            >
+              <div className="flex items-center gap-2.5">
+                <GraduationCap className="w-4 h-4 text-amber-400" />
+                <span>The Overcomer Workbook (Full Book)</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                15 Challenges
+              </span>
+            </button>
+
             <button
               onClick={() => {
                 soundEffects.playLikeSparkle();
@@ -151,17 +209,18 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
 
             {/* My Journey */}
             <button
-              onClick={() => handleAction(() => {
-                if (onOpenProfile) onOpenProfile();
-              })}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-100 hover:bg-amber-500/20 transition-all text-xs font-bold"
+              onClick={() =>
+                handleAction(() => {
+                  if (onOpenProfile) onOpenProfile();
+                })
+              }
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 transition-all text-xs font-bold"
             >
               <div className="flex items-center gap-2.5">
                 <Heart className="w-4 h-4 text-amber-400" />
                 <span>My Journey (Profile)</span>
               </div>
             </button>
-
           </div>
 
           {/* Community & Feeds */}

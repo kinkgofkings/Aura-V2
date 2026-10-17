@@ -76,6 +76,7 @@ export function PodcastFeed({
   const [selectedVideo, setSelectedVideo] = useState<SermonItem | null>(null);
   const [isPlayingModalVideo, setIsPlayingModalVideo] = useState(false);
   const [syncingLbc, setSyncingLbc] = useState(false);
+  const [syncingTg, setSyncingTg] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
   const [activePlayingVideo, setActivePlayingVideo] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -281,6 +282,23 @@ export function PodcastFeed({
       console.error('Error syncing Lighthouse sermons:', err);
     } finally {
       setSyncingLbc(false);
+    }
+  };
+
+  const handleSyncTylerGaulden = async () => {
+    setSyncingTg(true);
+    setSyncSuccessMsg(null);
+    try {
+      soundEffects.playTap();
+      const res = await fetch('/api/bible/sync/tyler-gaulden', { method: 'POST' });
+      const data = await res.json();
+      await fetchAllSermons();
+      setSyncSuccessMsg(`Synced! Tyler Gaulden channel updated (+${data.addedCount || 0} new messages, total ${data.totalNow || 153}).`);
+      setTimeout(() => setSyncSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error('Error syncing Tyler Gaulden sermons:', err);
+    } finally {
+      setSyncingTg(false);
     }
   };
 
@@ -592,9 +610,19 @@ export function PodcastFeed({
             ))}
             <button
               type="button"
+              onClick={handleSyncTylerGaulden}
+              disabled={syncingTg}
+              className="ml-auto px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-300 border border-yellow-500/30 flex-shrink-0 disabled:opacity-50"
+              title="Sweep YouTube for recent Tyler Gaulden messages (@TylerGaulden)"
+            >
+              <RotateCcw className={`w-3 h-3 ${syncingTg ? 'animate-spin' : ''}`} />
+              <span>{syncingTg ? 'Sweeping Tyler Gaulden...' : 'Sync Tyler Gaulden'}</span>
+            </button>
+            <button
+              type="button"
               onClick={handleSyncLbc}
               disabled={syncingLbc}
-              className="ml-auto px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 flex-shrink-0 disabled:opacity-50"
+              className="px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 flex-shrink-0 disabled:opacity-50"
               title="Sweep YouTube for all Lighthouse Baptist Church sermons (@lighthousewinc)"
             >
               <RotateCcw className={`w-3 h-3 ${syncingLbc ? 'animate-spin' : ''}`} />

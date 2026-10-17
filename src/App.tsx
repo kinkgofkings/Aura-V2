@@ -39,6 +39,8 @@ import { RecoveryDashboard } from './components/recovery/RecoveryDashboard';
 
 import { UnverifiedBanner } from './components/auth/UnverifiedBanner';
 import { InAppBrowser } from './components/common/InAppBrowser';
+import { GivingModal } from './components/giving/GivingModal';
+import { PromoteLeadersModal } from './components/admin/PromoteLeadersModal';
 
 function MainApp() {
   useDevotionalNotifications();
@@ -81,6 +83,8 @@ function MainApp() {
   });
 
   const [showGospelTract, setShowGospelTract] = useState(false);
+  const [isGivingModalOpen, setIsGivingModalOpen] = useState(false);
+  const [isPromoteLeadersOpen, setIsPromoteLeadersOpen] = useState(false);
 
   React.useEffect(() => {
     if (!showSplashScreen) {
@@ -162,15 +166,22 @@ function MainApp() {
       setShowSplashScreen(true);
     };
 
+    const handleOpenGiving = () => setIsGivingModalOpen(true);
+    const handleOpenPromoteLeaders = () => setIsPromoteLeadersOpen(true);
+
     window.addEventListener('navigate_tab', handleTabNav);
     window.addEventListener('open_share_modal', handleOpenShare);
     window.addEventListener('open_user_profile', handleOpenUserProfile);
     window.addEventListener('open_splash_screen', handleOpenSplash);
+    window.addEventListener('open_giving_modal', handleOpenGiving);
+    window.addEventListener('open_promote_leaders_modal', handleOpenPromoteLeaders);
     return () => {
       window.removeEventListener('navigate_tab', handleTabNav);
       window.removeEventListener('open_share_modal', handleOpenShare);
       window.removeEventListener('open_user_profile', handleOpenUserProfile);
       window.removeEventListener('open_splash_screen', handleOpenSplash);
+      window.removeEventListener('open_giving_modal', handleOpenGiving);
+      window.removeEventListener('open_promote_leaders_modal', handleOpenPromoteLeaders);
     };
   }, []);
 
@@ -320,6 +331,18 @@ function MainApp() {
 
       {/* Global In-App Webview Browser with Breadcrumbs */}
       <InAppBrowser />
+
+      {/* Kingdom Giving & Square Donation Modal */}
+      <GivingModal
+        isOpen={isGivingModalOpen}
+        onClose={() => setIsGivingModalOpen(false)}
+      />
+
+      {/* Ministry Staff & Leaders Promotion Modal */}
+      <PromoteLeadersModal
+        isOpen={isPromoteLeadersOpen}
+        onClose={() => setIsPromoteLeadersOpen(false)}
+      />
     </div>
   );
 }

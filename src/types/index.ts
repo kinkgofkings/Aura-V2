@@ -18,6 +18,9 @@ export interface UserProfile {
   authProvider?: 'google' | 'email' | 'facebook' | 'github' | 'phone' | 'guest' | 'demo';
   hasPassword?: boolean;
   followingUserIds?: string[];
+  role?: 'member' | 'teacher' | 'admin';
+  isAdmin?: boolean;
+  isTeacher?: boolean;
 }
 
 export type MediaType = 'image' | 'video' | 'audio' | 'none';

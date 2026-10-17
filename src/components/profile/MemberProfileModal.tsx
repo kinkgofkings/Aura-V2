@@ -23,6 +23,9 @@ import {
   Globe,
   Tag,
   Zap,
+  Crown,
+  GraduationCap,
+  User,
 } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -47,7 +50,7 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
   onClose,
   onOpenSelfEdit,
 }) => {
-  const { user: currentUser, allUsers, followUser } = useAuth();
+  const { user: currentUser, allUsers, followUser, promoteUserRole } = useAuth();
   const { startDirectConversation, setActiveConversationId } = useChat();
   const { startCall } = useCall();
   const { posts, likePost, stories } = useSocial();
@@ -563,6 +566,64 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
                     Direct phone and video calls with {targetUser.name} connect via peer-to-peer encryption with spatial audio and HD video.
                   </p>
                 </div>
+
+                {/* Leadership Promotion Card (Admin Only) */}
+                {(currentUser?.role === 'admin' ||
+                  currentUser?.isAdmin ||
+                  currentUser?.handle?.toLowerCase() === 'tex' ||
+                  currentUser?.email?.toLowerCase().includes('lightsouttattootex') ||
+                  currentUser?.email?.toLowerCase().includes('tex@aura.social')) &&
+                  !isSelf && (
+                    <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-500/40 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                          <Crown className="w-4 h-4 text-amber-400" />
+                          Leadership Role & Privileges
+                        </span>
+                        <span className="text-[10px] uppercase font-black text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded">
+                          {targetUser.role || (targetUser.isAdmin ? 'admin' : targetUser.isTeacher ? 'teacher' : 'member')}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Promote {targetUser.name.split(' ')[0]} to <strong>Teacher / Leader</strong> to allow them to create and edit curriculum and grade student workbook challenges, or to <strong>Admin</strong> for full app privileges.
+                      </p>
+                      <div className="grid grid-cols-3 gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => promoteUserRole(targetUser.id, 'member')}
+                          className={`py-1.5 rounded-xl font-bold text-[11px] transition-all ${
+                            (targetUser.role === 'member' || (!targetUser.role && !targetUser.isAdmin && !targetUser.isTeacher))
+                              ? 'bg-slate-700 text-white shadow-sm'
+                              : 'bg-white/5 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Member
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => promoteUserRole(targetUser.id, 'teacher')}
+                          className={`py-1.5 rounded-xl font-bold text-[11px] transition-all ${
+                            targetUser.role === 'teacher' || targetUser.isTeacher
+                              ? 'bg-blue-600 text-white shadow-sm font-black'
+                              : 'bg-white/5 text-blue-300 hover:bg-blue-500/20'
+                          }`}
+                        >
+                          Teacher / Leader
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => promoteUserRole(targetUser.id, 'admin')}
+                          className={`py-1.5 rounded-xl font-bold text-[11px] transition-all ${
+                            targetUser.role === 'admin' || targetUser.isAdmin
+                              ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
+                              : 'bg-white/5 text-amber-400 hover:bg-amber-500/20'
+                          }`}
+                        >
+                          Admin
+                        </button>
+                      </div>
+                    </div>
+                  )}
               </div>
             )}
           </div>

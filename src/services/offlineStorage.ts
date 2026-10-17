@@ -80,12 +80,26 @@ class OfflineStorageService {
       }
     } catch (e: any) {
       console.warn(`Error saving key ${key}:`, e);
-      if (typeof window !== 'undefined' && (e?.name === 'QuotaExceededError' || e?.code === 22)) {
+      if (typeof window !== 'undefined') {
         try {
           if (Array.isArray(data)) {
-            // Trim to most recent items to stay within quota
-            const trimmed = (data as any[]).slice(0, 5);
-            localStorage.setItem(key, JSON.stringify(trimmed));
+            // Strip any raw large base64 strings before caching to stay well within browser quota
+            const sanitized = (data as any[]).slice(0, 30).map((item) => {
+              if (item && typeof item === 'object') {
+                const copy = { ...item };
+                if (Array.isArray(copy.mediaUrls)) {
+                  copy.mediaUrls = copy.mediaUrls.map((m: any) =>
+                    typeof m === 'string' && m.length > 500 && m.startsWith('data:') ? 'cached_media_pending' : m
+                  );
+                }
+                if (typeof copy.authorAvatar === 'string' && copy.authorAvatar.length > 500 && copy.authorAvatar.startsWith('data:')) {
+                  copy.authorAvatar = 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com';
+                }
+                return copy;
+              }
+              return item;
+            });
+            localStorage.setItem(key, JSON.stringify(sanitized));
           }
         } catch {}
       }

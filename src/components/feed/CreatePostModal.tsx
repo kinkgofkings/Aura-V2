@@ -40,6 +40,7 @@ import { notificationService } from '../../services/notifications';
 import { ALL_CHRISTIAN_PRESET_IMAGES } from '../../content/presetImages';
 import { UnsplashSearch } from '../common/UnsplashSearch';
 import { UniversalUnsplashModal } from '../common/UniversalUnsplashModal';
+import { api } from '../../services/api';
 
 interface CreatePostModalProps {
   onClose: () => void;
@@ -271,8 +272,16 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             await mediaCache.saveMedia(id, file);
             setMediaUrls((prev) => [...prev, `localmedia://video/${id}`]);
           } else {
+            // Instant local preview via compression
             const compressedUrl = await compressImage(file, 800, 800, 0.6);
             setMediaUrls((prev) => [...prev, compressedUrl]);
+
+            // Background upload to static server storage for clean URLs and instant delivery
+            api.uploadFile(file).then((res) => {
+              if (res?.url) {
+                setMediaUrls((prev) => prev.map((url) => (url === compressedUrl ? res.url : url)));
+              }
+            }).catch(() => {});
           }
         } catch (err) {
           console.warn('Error processing uploaded file:', err);
@@ -348,9 +357,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       const combinedTags = Array.from(new Set([...categoryTags, ...manualTags]));
 
       if (editPostId) {
-        await editPost(editPostId, content.trim(), mediaUrls, combinedTags, location.trim() || undefined);
+        await Promise.race([
+          editPost(editPostId, content.trim(), mediaUrls, combinedTags, location.trim() || undefined),
+          new Promise((resolve) => setTimeout(resolve, 4000)),
+        ]);
       } else {
-        await createPost(content.trim(), mediaUrls, combinedTags, location.trim() || undefined);
+        await Promise.race([
+          createPost(content.trim(), mediaUrls, combinedTags, location.trim() || undefined),
+          new Promise((resolve) => setTimeout(resolve, 4000)),
+        ]);
       }
       
       stopCamera();

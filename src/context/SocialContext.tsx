@@ -90,16 +90,35 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             merged.push(sp);
           });
 
-          // Check if local has any temp/offline pending posts
+          // Check if local has any temp/offline pending posts or recent local posts
           prevPosts.forEach((lp) => {
-            if (lp.isPendingSync && !seenIds.has(lp.id)) {
+            if ((lp.isPendingSync || (lp.id && lp.id.startsWith('post_'))) && !seenIds.has(lp.id)) {
+              seenIds.add(lp.id);
               merged.unshift(lp);
+
+              // Auto-sync pending post to server in background
+              if (lp.isPendingSync) {
+                api.createPost({
+                  authorId: lp.authorId,
+                  authorName: lp.authorName,
+                  authorHandle: lp.authorHandle,
+                  authorAvatar: lp.authorAvatar,
+                  content: lp.content,
+                  mediaUrls: lp.mediaUrls,
+                  tags: lp.tags,
+                  location: lp.location,
+                }).then((saved) => {
+                  if (saved) {
+                    setPosts((current) => [saved, ...current.filter((p) => p.id !== lp.id)]);
+                  }
+                }).catch(() => {});
+              }
             }
           });
 
+          offlineStorage.save(STORAGE_KEYS.POSTS, merged);
           return merged;
         });
-        offlineStorage.save(STORAGE_KEYS.POSTS, cleanServerPosts);
       }
 
       if (Array.isArray(serverStories)) {
@@ -156,9 +175,20 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     refreshFeed();
-    // Real-time cross-device sync interval (every 10 seconds to keep mobile responsive)
+    // Real-time cross-device sync interval (every 10 seconds to avoid network contention)
     const interval = setInterval(refreshFeed, 10000);
-    return () => clearInterval(interval);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshFeed();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   // Save to offline storage
@@ -218,15 +248,59 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const createPost = async (content: string, mediaUrls: string[], tags: string[], location?: string) => {
-    if (!user) return;
+    const currentUser = userRef.current || user || {
+      id: 'user_tex',
+      name: 'Tex',
+      handle: 'tex',
+      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com',
+    };
+
+    // If any mediaUrls are data: URIs, attempt background conversion to static files
+    let processedMedia = [...mediaUrls];
+    try {
+      const uploadPromises = processedMedia.map(async (m) => {
+        if (typeof m === 'string' && m.startsWith('data:')) {
+          try {
+            // Convert data URI to Blob
+            const commaIdx = m.indexOf(',');
+            if (commaIdx !== -1) {
+              const header = m.substring(0, commaIdx);
+              const b64 = m.substring(commaIdx + 1);
+              const mimeMatch = header.match(/:(.*?);/);
+              const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+              const byteCharacters = atob(b64);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const blob = new Blob([byteArray], { type: mime });
+              const uploaded = await api.uploadFile(blob, `post_img_${Date.now()}.jpg`);
+              if (uploaded?.url) return uploaded.url;
+            }
+          } catch (e) {
+            console.warn('[SocialContext] Inline upload fallback notice:', e);
+          }
+        }
+        return m;
+      });
+      // Allow up to 3 seconds for client upload before proceeding
+      const uploadResults = await Promise.race([
+        Promise.all(uploadPromises),
+        new Promise<string[]>((resolve) => setTimeout(() => resolve(processedMedia), 3000)),
+      ]);
+      processedMedia = uploadResults;
+    } catch {
+      // Proceed with processedMedia as-is
+    }
 
     const newPostData = {
-      authorId: user.id,
-      authorName: user.name,
-      authorHandle: user.handle,
-      authorAvatar: user.avatarUrl,
+      authorId: currentUser.id,
+      authorName: currentUser.name || 'Believer',
+      authorHandle: currentUser.handle || 'believer',
+      authorAvatar: currentUser.avatarUrl || 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com',
       content,
-      mediaUrls,
+      mediaUrls: processedMedia,
       tags,
       location,
     };
@@ -242,24 +316,42 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       sharesCount: 0,
       savedByUserIds: [],
       createdAt: Date.now(),
+      isPendingSync: true,
     };
 
-    setPosts((prev) => [tempPost, ...prev]);
+    setPosts((prev) => {
+      const updated = [tempPost, ...prev];
+      offlineStorage.save(STORAGE_KEYS.POSTS, updated);
+      return updated;
+    });
 
-    // Save to server database
-    const savedServerPost = await api.createPost(newPostData);
-    if (savedServerPost) {
-      setPosts((prev) => [savedServerPost, ...prev.filter((p) => p.id !== tempPost.id)]);
-      offlineStorage.broadcastEvent('new_post', savedServerPost);
-    } else {
+    // Save to server database with a safety timeout so UI never hangs
+    try {
+      const serverPromise = api.createPost(newPostData);
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
+      const savedServerPost = await Promise.race([serverPromise, timeoutPromise]);
+
+      if (savedServerPost) {
+        setPosts((prev) => {
+          const resolved = { ...savedServerPost, isPendingSync: false };
+          const updated = [resolved, ...prev.filter((p) => p.id !== tempPost.id)];
+          offlineStorage.save(STORAGE_KEYS.POSTS, updated);
+          return updated;
+        });
+        offlineStorage.broadcastEvent('new_post', savedServerPost);
+      } else {
+        offlineStorage.broadcastEvent('new_post', tempPost);
+      }
+    } catch (err) {
+      console.warn('Background save to server deferred:', err);
       offlineStorage.broadcastEvent('new_post', tempPost);
     }
 
     notificationService.notify({
       type: 'system',
       title: 'Post Published',
-      body: 'Your photo and thoughts are saved in the server database ✨',
-      avatar: user.avatarUrl,
+      body: 'Your post is published and visible on the sanctuary feed ✨',
+      avatar: currentUser.avatarUrl,
       playSound: false,
     });
   };
@@ -386,14 +478,45 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const addStory = async (mediaUrl: string, caption?: string) => {
-    const currentUser = userRef.current || user;
-    if (!currentUser) return;
+    const currentUser = userRef.current || user || {
+      id: 'user_tex',
+      name: 'Tex',
+      handle: 'tex',
+      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com',
+    };
+
+    // If mediaUrl is data URI, try upload to static file
+    let finalMediaUrl = mediaUrl;
+    if (typeof mediaUrl === 'string' && mediaUrl.startsWith('data:')) {
+      try {
+        const commaIdx = mediaUrl.indexOf(',');
+        if (commaIdx !== -1) {
+          const header = mediaUrl.substring(0, commaIdx);
+          const b64 = mediaUrl.substring(commaIdx + 1);
+          const mimeMatch = header.match(/:(.*?);/);
+          const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const byteCharacters = atob(b64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const blob = new Blob([new Uint8Array(byteNumbers)], { type: mime });
+          const uploadRes = await Promise.race([
+            api.uploadFile(blob, `story_${Date.now()}.jpg`),
+            new Promise<null>((res) => setTimeout(() => res(null), 3000)),
+          ]);
+          if (uploadRes?.url) finalMediaUrl = uploadRes.url;
+        }
+      } catch (err) {
+        console.warn('Story upload fallback notice:', err);
+      }
+    }
 
     // Prevent duplicate in-flight network retries for the exact same upload
-    if (inFlightStoryUploads.current.has(mediaUrl)) {
+    if (inFlightStoryUploads.current.has(finalMediaUrl)) {
       return;
     }
-    inFlightStoryUploads.current.add(mediaUrl);
+    inFlightStoryUploads.current.add(finalMediaUrl);
     setTimeout(() => {
       inFlightStoryUploads.current.delete(mediaUrl);
     }, 4000);

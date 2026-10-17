@@ -44,6 +44,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     user?.email?.toLowerCase().includes('lightsouttattootex') ||
     user?.email?.toLowerCase().includes('tex@aura.social');
 
+  const isTeacherOrAdmin =
+    isTexAdmin ||
+    user?.role === 'admin' ||
+    user?.role === 'teacher' ||
+    user?.isAdmin ||
+    user?.isTeacher;
+
   const [isMotivationOpen, setIsMotivationOpen] = useState(false);
   const [isSuperDrawerOpen, setIsSuperDrawerOpen] = useState(false);
 
@@ -174,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Path to Freedom</span>
           </button>
 
-          {isTexAdmin && (
+          {isTeacherOrAdmin && (
             <button
               onClick={() => setActiveTab('studio')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${

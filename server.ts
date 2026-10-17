@@ -1,13 +1,9 @@
 import 'dotenv/config';
-import http from 'http';
 import { getLiveMinistryFeed } from "./services/youtubeFeedService";
 import { performUnifiedImageSearch } from "./services/imageSearchService";
 import webpush from "web-push";
 import express from 'express';
 import path from 'path';
-import { attachRealtime, countSockets, pushToUser } from './server/realtime';
-import { getIceServers, hasTurnServer } from './server/iceServers';
-import { buildIncomingCallPush, callPushTopic, summarizeCallDelivery, type PushSendResult } from './server/callDelivery';
 import { db } from './server/db';
 import { createBibleRoutes } from './routes/bible';
 import { BibleStudyDB } from './server/bible/models';
@@ -17,13 +13,56 @@ import { AuthService } from './services/authService';
 import { createRecoveryRoutes } from './routes/recovery';
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import multer from 'multer';
 import { synthesizeBibleAudio } from './server/audioService';
 import { startYoutubeFolderWatcher, syncYoutubeSermons } from './services/youtubeSyncService';
 import { startLighthouseDailyScheduler, syncLighthouseSermons } from './services/lighthouseSyncService';
+import { seedRU10Principles, syncTylerGauldenSermons } from './services/tylerGauldenSyncService';
+import { workbookService } from './server/workbookService';
+import { givingService } from './server/givingService';
+
+/**
+ * Decodes base64 media data URIs into static files on disk (public/uploads/posts/)
+ * to prevent massive JSON payloads, lag, and database bloat.
+ */
+function saveBase64Media(dataUri: string, subfolder: 'posts' | 'avatars' | 'stories' = 'posts'): string {
+  try {
+    if (typeof dataUri !== 'string' || !dataUri.startsWith('data:')) return dataUri;
+    const commaIndex = dataUri.indexOf(',');
+    if (commaIndex === -1) return dataUri;
+
+    const header = dataUri.substring(0, commaIndex);
+    const base64Data = dataUri.substring(commaIndex + 1);
+
+    let ext = 'jpg';
+    if (header.includes('png')) ext = 'png';
+    else if (header.includes('webp')) ext = 'webp';
+    else if (header.includes('gif')) ext = 'gif';
+    else if (header.includes('mp4') || header.includes('video')) ext = 'mp4';
+    else if (header.includes('svg')) ext = 'svg';
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    if (!buffer || buffer.length === 0) return dataUri;
+
+    const filename = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.${ext}`;
+    const targetDir = path.join(process.cwd(), 'public', 'uploads', subfolder);
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+    const filePath = path.join(targetDir, filename);
+    fs.writeFileSync(filePath, buffer);
+    return `/uploads/${subfolder}/${filename}`;
+  } catch (err) {
+    console.error('Error saving base64 media to disk:', err);
+    return dataUri;
+  }
+}
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const portArgIdx = process.argv.indexOf('--port');
+  const PORT = portArgIdx !== -1 && process.argv[portArgIdx + 1]
+    ? parseInt(process.argv[portArgIdx + 1], 10)
+    : (process.env.DEFAULT_APP_PORT ? parseInt(process.env.DEFAULT_APP_PORT, 10) : 3000);
 
   // JSON request body parser
   app.use(express.json({ limit: '25mb' }));
@@ -157,17 +196,7 @@ async function startServer() {
 
   // Health & System
   app.get('/api/health', (req, res) => {
-    res.json({
-      status: 'ok',
-      server: 'Aura Social Express Backend',
-      timestamp: Date.now(),
-      realtimeClients: countSockets(),
-      turnConfigured: hasTurnServer(),
-    });
-  });
-
-  app.get('/api/webrtc/ice', (_req, res) => {
-    res.json({ iceServers: getIceServers(), turnConfigured: hasTurnServer() });
+    res.json({ status: 'ok', server: 'Aura Social Express Backend', timestamp: Date.now() });
   });
 
   app.get('/api/system/info', (req, res) => {
@@ -236,29 +265,29 @@ async function startServer() {
     res.json(safeUser);
   });
 
-  const saveUserProfile = (id: string, body: Record<string, unknown>) => {
-    const { passwordHash: _passwordHash, id: _id, ...updates } = body || {};
-    let updated = db.updateUser(id, updates);
-    if (!updated && typeof updates.email === 'string') {
-      const byEmail = db.getUserByEmail(updates.email);
-      if (byEmail) updated = db.updateUser(byEmail.id, updates);
-    }
-    if (!updated && typeof updates.handle === 'string') {
-      const byHandle = db.getUserByHandle(updates.handle);
-      if (byHandle) updated = db.updateUser(byHandle.id, updates);
-    }
-    return updated;
-  };
-
   app.put('/api/users/:id', (req, res) => {
-    const updated = saveUserProfile(req.params.id, req.body);
+    const updateData = { ...req.body };
+    if (typeof updateData.avatarUrl === 'string' && updateData.avatarUrl.startsWith('data:')) {
+      updateData.avatarUrl = saveBase64Media(updateData.avatarUrl, 'avatars');
+    }
+    if (typeof updateData.bannerUrl === 'string' && updateData.bannerUrl.startsWith('data:')) {
+      updateData.bannerUrl = saveBase64Media(updateData.bannerUrl, 'avatars');
+    }
+    const updated = db.updateUser(req.params.id, updateData);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     const { passwordHash, ...safeUser } = updated;
     res.json(safeUser);
   });
 
   app.patch('/api/users/:id', (req, res) => {
-    const updated = saveUserProfile(req.params.id, req.body);
+    const updateData = { ...req.body };
+    if (typeof updateData.avatarUrl === 'string' && updateData.avatarUrl.startsWith('data:')) {
+      updateData.avatarUrl = saveBase64Media(updateData.avatarUrl, 'avatars');
+    }
+    if (typeof updateData.bannerUrl === 'string' && updateData.bannerUrl.startsWith('data:')) {
+      updateData.bannerUrl = saveBase64Media(updateData.bannerUrl, 'avatars');
+    }
+    const updated = db.updateUser(req.params.id, updateData);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     const { passwordHash, ...safeUser } = updated;
     res.json(safeUser);
@@ -279,6 +308,200 @@ async function startServer() {
     res.json(result);
   });
 
+  // Promote users to admin or teacher
+  app.post('/api/users/:id/role', (req, res) => {
+    const { role } = req.body;
+    if (!role || !['member', 'teacher', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Valid role required (member, teacher, admin)' });
+    }
+    const updated = db.updateUser(req.params.id, {
+      role,
+      isTeacher: role === 'teacher' || role === 'admin',
+      isAdmin: role === 'admin'
+    } as any);
+    if (!updated) return res.status(404).json({ error: 'User not found' });
+    const { passwordHash, ...safeUser } = updated;
+    res.json(safeUser);
+  });
+
+  // --- OVERCOMER WORKBOOK & MULTI-BOOK CURRICULUM ROUTES ---
+  app.get('/api/workbooks', (_req, res) => {
+    try {
+      res.json({ success: true, workbooks: workbookService.getWorkbooks() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get workbooks' });
+    }
+  });
+
+  app.get('/api/workbooks/:id', (req, res) => {
+    try {
+      const book = workbookService.getWorkbookById(req.params.id);
+      if (!book) return res.status(404).json({ error: 'Workbook not found' });
+      res.json({ success: true, workbook: book });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get workbook' });
+    }
+  });
+
+  app.post('/api/workbooks', (req, res) => {
+    try {
+      const { title } = req.body;
+      if (!title) return res.status(400).json({ error: 'Workbook title is required' });
+      const book = workbookService.createWorkbook(req.body);
+      res.status(201).json({ success: true, workbook: book });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to create workbook' });
+    }
+  });
+
+  app.put('/api/workbooks/:id', (req, res) => {
+    try {
+      const updated = workbookService.updateWorkbook(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ error: 'Workbook not found' });
+      res.json({ success: true, workbook: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update workbook' });
+    }
+  });
+
+  app.delete('/api/workbooks/:id', (req, res) => {
+    try {
+      const success = workbookService.deleteWorkbook(req.params.id);
+      if (!success) return res.status(400).json({ error: 'Cannot delete default workbook or workbook not found' });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete workbook' });
+    }
+  });
+
+  app.post('/api/workbooks/:id/challenges', (req, res) => {
+    try {
+      const newCh = workbookService.addChallengeToWorkbook(req.params.id, req.body);
+      if (!newCh) return res.status(404).json({ error: 'Workbook not found' });
+      res.status(201).json({ success: true, challenge: newCh });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to add challenge' });
+    }
+  });
+
+  app.put('/api/workbooks/:id/challenges/:challengeId', (req, res) => {
+    try {
+      const updated = workbookService.updateChallengeInWorkbook(
+        req.params.id,
+        Number(req.params.challengeId),
+        req.body
+      );
+      if (!updated) return res.status(404).json({ error: 'Challenge or workbook not found' });
+      res.json({ success: true, challenge: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update challenge' });
+    }
+  });
+
+  app.delete('/api/workbooks/:id/challenges/:challengeId', (req, res) => {
+    try {
+      const success = workbookService.deleteChallengeFromWorkbook(
+        req.params.id,
+        Number(req.params.challengeId)
+      );
+      if (!success) return res.status(404).json({ error: 'Challenge not found' });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete challenge' });
+    }
+  });
+
+  app.post('/api/workbook/submit', (req, res) => {
+    try {
+      const { userId, userName, challengeId, answers, studentSignature, userAvatar, workbookId } = req.body;
+      if (!userId || !challengeId) {
+        return res.status(400).json({ error: 'userId and challengeId are required' });
+      }
+      const submission = workbookService.saveSubmission(
+        userId,
+        userName,
+        Number(challengeId),
+        answers || {},
+        studentSignature,
+        userAvatar,
+        workbookId || 'overcomer'
+      );
+      res.json({ success: true, submission });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to save submission' });
+    }
+  });
+
+  app.get('/api/workbook/my-submissions/:userId', (req, res) => {
+    try {
+      const workbookId = req.query.workbookId as string | undefined;
+      const submissions = workbookService.getUserSubmissions(req.params.userId, workbookId);
+      res.json({ submissions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get submissions' });
+    }
+  });
+
+  app.get('/api/workbook/submissions', (req, res) => {
+    try {
+      const workbookId = req.query.workbookId as string | undefined;
+      const submissions = workbookService.getAllSubmissions(workbookId);
+      res.json({ submissions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to get all submissions' });
+    }
+  });
+
+  app.post('/api/workbook/grade', (req, res) => {
+    try {
+      const { submissionId, grade, feedback, teacherId, teacherName, teacherSignature } = req.body;
+      if (!submissionId || !grade) {
+        return res.status(400).json({ error: 'submissionId and grade are required' });
+      }
+      const graded = workbookService.gradeSubmission(
+        submissionId,
+        grade,
+        feedback || '',
+        teacherId || 'teacher',
+        teacherName || 'Challenge Leader',
+        teacherSignature || teacherName || 'Signed by Leader'
+      );
+      if (!graded) return res.status(404).json({ error: 'Submission not found' });
+      res.json({ success: true, submission: graded });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to grade submission' });
+    }
+  });
+
+  // --- GIVING & SQUARE DONATION ROUTES ---
+  app.get('/api/donations/config', (_req, res) => {
+    res.json(givingService.getConfig());
+  });
+
+  app.post('/api/donations/config', (req, res) => {
+    const updated = givingService.updateConfig(req.body);
+    res.json(updated);
+  });
+
+  app.post('/api/donations/square', (req, res) => {
+    try {
+      const record = givingService.processDonation(req.body);
+      res.status(201).json({ success: true, donation: record });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to process donation' });
+    }
+  });
+
+  app.get('/api/donations/history', (_req, res) => {
+    res.json({ donations: givingService.getDonations() });
+  });
+
+  app.get('/api/donations/receipt/:txId', (req, res) => {
+    const donation = givingService.getDonationByTxId(req.params.txId);
+    if (!donation) return res.status(404).json({ error: 'Receipt not found' });
+    res.json(donation);
+  });
+
   // --- Posts & Feed API ---
   app.get('/api/posts', (req, res) => {
     const posts = db.getPosts();
@@ -291,21 +514,65 @@ async function startServer() {
     res.json(post);
   });
 
-  app.post('/api/posts', (req, res) => {
-    const { authorId, authorName, authorHandle, authorAvatar, content, mediaUrls, tags, location } = req.body;
-    
-    // A post must have an author, and either some text content OR some media
-    if (!authorId || (!content && (!mediaUrls || mediaUrls.length === 0))) {
-      return res.status(400).json({ error: 'authorId and either content or mediaUrls are required' });
+  // General media upload route for posts, stories, and profiles
+  const postsUploadDir = path.join(process.cwd(), 'public', 'uploads', 'posts');
+  if (!fs.existsSync(postsUploadDir)) fs.mkdirSync(postsUploadDir, { recursive: true });
+
+  const postMediaStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, postsUploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.jpg';
+      const safeName = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}${ext}`;
+      cb(null, safeName);
     }
+  });
+  const postMediaUpload = multer({
+    storage: postMediaStorage,
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+  });
+
+  app.post('/api/upload', postMediaUpload.single('file'), (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      const url = `/uploads/posts/${req.file.filename}`;
+      res.status(201).json({ success: true, url, filename: req.file.filename });
+    } catch (err: any) {
+      console.error('Upload failed:', err);
+      res.status(500).json({ error: err.message || 'Upload failed' });
+    }
+  });
+
+  app.post('/api/posts', (req, res) => {
+    let { authorId, authorName, authorHandle, authorAvatar, content, mediaUrls, tags, location } = req.body;
+    
+    // Fallback author if missing so user post is never lost
+    if (!authorId) {
+      authorId = 'user_tex';
+      authorName = authorName || 'Tex';
+      authorHandle = authorHandle || 'tex';
+      authorAvatar = authorAvatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com';
+    }
+
+    if (!content && (!mediaUrls || mediaUrls.length === 0)) {
+      return res.status(400).json({ error: 'Either content or mediaUrls are required' });
+    }
+
+    // Convert any base64 data URIs into static files on disk to prevent bloat & lag
+    let processedMedia = Array.isArray(mediaUrls) ? mediaUrls : [];
+    processedMedia = processedMedia.map((url: string) => {
+      if (typeof url === 'string' && url.startsWith('data:')) {
+        return saveBase64Media(url);
+      }
+      return url;
+    });
     
     const newPost = db.createPost({
       authorId,
       authorName,
       authorHandle,
       authorAvatar,
-      content,
-      mediaUrls: mediaUrls || [],
+      content: content || '',
+      mediaUrls: processedMedia,
       tags: tags || [],
       location,
     });
@@ -313,8 +580,17 @@ async function startServer() {
   });
 
   app.patch('/api/posts/:id', (req, res) => {
-    const { content, mediaUrls, tags, location } = req.body;
-    const updatedPost = db.updatePost(req.params.id, { content, mediaUrls, tags, location });
+    let { content, mediaUrls, tags, location } = req.body;
+    let processedMedia = Array.isArray(mediaUrls) ? mediaUrls : mediaUrls;
+    if (Array.isArray(processedMedia)) {
+      processedMedia = processedMedia.map((url: string) => {
+        if (typeof url === 'string' && url.startsWith('data:')) {
+          return saveBase64Media(url);
+        }
+        return url;
+      });
+    }
+    const updatedPost = db.updatePost(req.params.id, { content, mediaUrls: processedMedia, tags, location });
     if (!updatedPost) return res.status(404).json({ error: 'Post not found' });
     res.json({ post: updatedPost });
   });
@@ -378,9 +654,15 @@ async function startServer() {
   });
 
   app.post('/api/stories', (req, res) => {
-    const { userId, mediaUrl, caption, userName, userAvatar } = req.body;
+    let { userId, mediaUrl, caption, userName, userAvatar } = req.body;
     if (!userId || !mediaUrl) {
       return res.status(400).json({ error: 'userId and mediaUrl are required' });
+    }
+    if (typeof mediaUrl === 'string' && mediaUrl.startsWith('data:')) {
+      mediaUrl = saveBase64Media(mediaUrl, 'stories');
+    }
+    if (typeof userAvatar === 'string' && userAvatar.startsWith('data:')) {
+      userAvatar = saveBase64Media(userAvatar, 'avatars');
     }
     const story = db.createStory(userId, mediaUrl, caption, userName, userAvatar);
     res.status(201).json(story);
@@ -429,9 +711,15 @@ async function startServer() {
   });
 
   app.post('/api/messages', (req, res) => {
-    const { conversationId, senderId, senderName, senderAvatar, content, mediaUrl, mediaType, audioDuration, replyTo, storyReply, callLog } = req.body;
+    let { conversationId, senderId, senderName, senderAvatar, content, mediaUrl, mediaType, audioDuration, replyTo, storyReply, callLog } = req.body;
     if (!conversationId || !senderId || (!content && !mediaUrl)) {
       return res.status(400).json({ error: 'conversationId, senderId, and content or media are required' });
+    }
+    if (typeof senderAvatar === 'string' && senderAvatar.startsWith('data:')) {
+      senderAvatar = saveBase64Media(senderAvatar, 'avatars');
+    }
+    if (typeof mediaUrl === 'string' && mediaUrl.startsWith('data:')) {
+      mediaUrl = saveBase64Media(mediaUrl, 'posts');
     }
     const message = db.sendMessage({
       conversationId,
@@ -462,7 +750,6 @@ async function startServer() {
               actionId: conversationId,
               url: `/?tab=chat&conversationId=${encodeURIComponent(conversationId)}`
             });
-            pushToUser(pId, { type: 'message:new', message });
           }
         }
       }
@@ -588,34 +875,17 @@ async function startServer() {
       ).all() as any[];
     }
 
-    const ids = new Set<string>([cleanId]);
-    const social = db.getUserById(cleanId) || db.getUserByEmail(cleanId);
-    if (social) {
-      ids.add(social.id);
-      if (social.email) ids.add(social.email);
-      if (social.handle) ids.add(social.handle);
-    }
-    const idList = Array.from(ids);
-    const placeholders = idList.map(() => "?").join(", ");
-    return authDb.prepare(
-      `SELECT * FROM push_subscriptions WHERE user_id IN (${placeholders})`
-    ).all(...idList) as any[];
+    return authDb.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(cleanId) as any[];
   };
 
   // Helper to send push to a user
-  const sendPushToUser = async (
-    userId: string,
-    payload: any,
-    options?: { ttl?: number; topic?: string }
-  ): Promise<PushSendResult> => {
-    const result: PushSendResult = { subscriptions: 0, delivered: 0, failed: 0, removed: 0 };
+  const sendPushToUser = async (userId: string, payload: any) => {
     try {
       const subs = getPushSubscriptionsForUser(userId);
-      result.subscriptions = subs?.length || 0;
       if (!subs || subs.length === 0) {
-        return result;
+        return;
       }
-      await Promise.all(subs.map(async (sub) => {
+      for (const sub of subs) {
         const pushSubscription = {
           endpoint: sub.endpoint,
           keys: {
@@ -623,28 +893,18 @@ async function startServer() {
             auth: sub.auth,
           },
         };
-        try {
-          await webpush.sendNotification(pushSubscription, JSON.stringify(payload), {
-            urgency: "high",
-            TTL: options?.ttl ?? 86400,
-            topic: options?.topic,
-            timeout: 8000,
-          });
-          result.delivered += 1;
-        } catch (err: any) {
-          result.failed += 1;
-          const status = err?.statusCode;
-          console.error("Push delivery failed:", status || err?.message || err, "user", userId);
-          if (status === 404 || status === 410) {
+        webpush.sendNotification(pushSubscription, JSON.stringify(payload), {
+          urgency: "high",
+          TTL: 86400,
+        }).catch((err: any) => {
+          if (err.statusCode === 404 || err.statusCode === 410) {
             authDb.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(sub.endpoint);
-            result.removed += 1;
           }
-        }
-      }));
+        });
+      }
     } catch (err) {
       console.error("Error dispatching push notifications:", err);
     }
-    return result;
   };
 
   // Helper to broadcast push notification to all subscribers
@@ -710,58 +970,35 @@ async function startServer() {
     const { userId, isVideo } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
 
-    const knownDevices = getPushSubscriptionsForUser(userId).length;
-    const testRoomId = 'room_test_' + Date.now();
-    const payload = buildIncomingCallPush({
-      callerId: 'system_tester',
-      callerName: 'Aura Calling Test',
-      callerAvatar: '/icons/icon-192.svg',
-      roomId: testRoomId,
-      isVideo,
-    });
-    payload.title = `Incoming ${isVideo !== false ? 'Video' : 'Audio'} Call (Test Ring)`;
-    payload.body = 'Aura Call Test is ringing your device. Tap to answer!';
-
-    // Delay so the person can leave Aura or lock the phone before the push arrives.
+    // Send push notification after 3.5 seconds so user has time to switch apps or lock screen
     setTimeout(() => {
-      sendPushToUser(userId, payload, { ttl: 60, topic: callPushTopic(testRoomId) }).catch((err) => {
-        console.error('Test call push failed:', err);
+      const testRoomId = 'room_test_' + Date.now();
+      sendPushToUser(userId, {
+        type: 'CALL_INCOMING',
+        action: 'incoming_call',
+        title: `📞 Incoming ${isVideo ? 'Video' : 'Audio'} Call (Test Ring)`,
+        body: 'Aura Call Test is ringing your device. Tap to answer!',
+        callerId: 'system_tester',
+        callerName: 'Aura Calling Test',
+        callerAvatar: '/icons/icon-192.svg',
+        roomId: testRoomId,
+        isVideo: isVideo !== false,
+        url: `/?action=incoming_call&roomId=${encodeURIComponent(testRoomId)}&callerId=system_tester&isVideo=${isVideo !== false}`
       });
     }, 3500);
 
-    res.json({
-      success: true,
-      subscriptions: knownDevices,
-      reachable: knownDevices > 0,
-      reason: knownDevices > 0 ? undefined : 'no_push_subscription',
-      message: knownDevices > 0
-        ? 'Test call will alert this device in 3.5 seconds'
-        : 'This phone is not registered for push. Allow notifications, then try again.',
-    });
-  });
-
-  app.get('/api/push/status', (req, res) => {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) return res.status(400).json({ error: 'userId query is required' });
-    const subscriptions = getPushSubscriptionsForUser(userId).length;
-    res.json({
-      userId,
-      subscriptions,
-      realtime: countSockets(userId),
-      registered: subscriptions > 0,
-    });
+    res.json({ success: true, message: 'Test call will ring device in 3.5 seconds' });
   });
 
   // --- Calls & WebRTC Signaling API ---
   // Active background ringing interval timers
   const activeRingTimers = new Map<string, NodeJS.Timeout>();
 
-  app.post('/api/calls', async (req, res) => {
+  app.post('/api/calls', (req, res) => {
     const { callerId, callerName, callerAvatar, receiverId, receiverName, receiverAvatar, isVideo, roomId } = req.body;
     if (!callerId || !receiverId || !roomId) {
       return res.status(400).json({ error: 'callerId, receiverId, and roomId are required' });
     }
-    try {
     const session = db.createOrUpdateCallSession({
       callerId,
       callerName,
@@ -780,20 +1017,22 @@ async function startServer() {
       activeRingTimers.delete(roomId);
     }
 
-    const pushPayload = buildIncomingCallPush({
+    // IMMEDIATELY SEND REAL HIGH-PRIORITY PUSH TO RECEIVER'S DEVICE
+    const pushPayload = {
+      type: 'CALL_INCOMING',
+      action: 'incoming_call',
+      title: `📞 Incoming ${isVideo !== false ? 'Video' : 'Audio'} Call`,
+      body: `${callerName || 'Someone'} is calling you on Aura...`,
       callerId,
       callerName,
       callerAvatar,
       roomId,
-      isVideo,
-    });
-    const topic = callPushTopic(roomId);
-    const realtimeDelivered = pushToUser(receiverId, { type: 'call:incoming', session, payload: pushPayload });
-    const pushResult = await sendPushToUser(receiverId, pushPayload, { ttl: 60, topic });
-    const delivery = summarizeCallDelivery(pushResult, realtimeDelivered);
+      isVideo: isVideo !== false,
+      url: `/?action=incoming_call&roomId=${encodeURIComponent(roomId)}&callerId=${encodeURIComponent(callerId)}&isVideo=${isVideo !== false}`
+    };
+    sendPushToUser(receiverId, pushPayload);
 
-    // Repeat the alert while the call is still ringing. Same topic collapses
-    // undelivered copies so a phone that was offline does not get a stack of stale rings.
+    // Pulse repeating rings every 4 seconds while status is 'calling' so device continues ringing
     let pulseCount = 0;
     const ringTimer = setInterval(() => {
       pulseCount++;
@@ -803,28 +1042,14 @@ async function startServer() {
         activeRingTimers.delete(roomId);
         return;
       }
-      const pulsePayload = buildIncomingCallPush({
-        callerId,
-        callerName,
-        callerAvatar,
-        roomId,
-        isVideo,
-        pulse: pulseCount,
-      });
-      pushToUser(receiverId, { type: 'call:incoming', session: current, payload: pulsePayload });
-      sendPushToUser(receiverId, pulsePayload, { ttl: 45, topic }).catch((err) => {
-        console.error('Call ring pulse failed:', err);
+      sendPushToUser(receiverId, {
+        ...pushPayload,
+        ringPulse: pulseCount,
       });
     }, 4000);
     activeRingTimers.set(roomId, ringTimer);
 
-    res.status(201).json({ ...session, delivery });
-    } catch (err) {
-      console.error('Failed to start call:', err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Failed to start call' });
-      }
-    }
+    res.status(201).json(session);
   });
 
   app.get('/api/calls/pending', (req, res) => {
@@ -853,9 +1078,6 @@ async function startServer() {
     const session = db.updateCallStatus(req.params.roomId, status);
     if (!session) return res.status(404).json({ error: 'Call session not found' });
 
-    pushToUser(session.callerId, { type: 'call:status', session });
-    pushToUser(session.receiverId, { type: 'call:status', session });
-
     // If call completed, declined or missed, optionally log in direct conversation
     if (status === 'ended' || status === 'declined') {
       const isMissed = !session.startedAt || session.status === 'calling';
@@ -867,7 +1089,7 @@ async function startServer() {
         callerName: session.callerName,
         callerAvatar: session.callerAvatar,
         isMissed: isMissed && status !== 'declined',
-      }, { ttl: 60, topic: callPushTopic(req.params.roomId) });
+      });
 
       // If receiver declined, notify caller
       if (status === 'declined') {
@@ -919,11 +1141,6 @@ async function startServer() {
       return res.status(400).json({ error: 'senderId, type, and data are required' });
     }
     const signal = db.addCallSignal(req.params.roomId, senderId, type, data);
-    const session = db.getCallSessionByRoomId(req.params.roomId);
-    if (session) {
-      const targetId = session.callerId === senderId ? session.receiverId : session.callerId;
-      pushToUser(targetId, { type: 'call:signal', signal });
-    }
     res.status(201).json(signal);
   });
 
@@ -1109,8 +1326,50 @@ async function startServer() {
     // Start background watcher & instant scanner for YouTube series videos
     startYoutubeFolderWatcher(bibleDB);
 
+    // Auto-seed all 10 Reformers Unanimous Spiritual Principles into SQLite
+    try {
+      seedRU10Principles(bibleDB);
+    } catch (ruErr) {
+      console.warn('[Startup] RU 10 principles seed note:', ruErr);
+    }
+
+    // Auto-sweep Tyler Gaulden ministry channel on startup and every 30 minutes
+    try {
+      syncTylerGauldenSermons(bibleDB).catch((tgErr) => {
+        console.warn('[Startup] Tyler Gaulden sweep note:', tgErr);
+      });
+      // Regular background interval: sweep Tyler Gaulden channel every 30 minutes
+      setInterval(() => {
+        syncTylerGauldenSermons(bibleDB).catch((tgErr) => {
+          console.warn('[Tyler Gaulden Sweep] Regular check note:', tgErr);
+        });
+      }, 30 * 60 * 1000);
+    } catch (schedErr) {
+      console.warn('[Startup] Tyler Gaulden scheduler note:', schedErr);
+    }
+
     // Start 3x daily automated scheduler for Lighthouse Baptist Church (@lighthousewinc)
     startLighthouseDailyScheduler(bibleDB);
+
+    // On-demand route to trigger an instant sweep for Tyler Gaulden channel
+    app.post('/api/bible/sync/tyler-gaulden', async (_req, res) => {
+      try {
+        const result = await syncTylerGauldenSermons(bibleDB);
+        res.json({ success: true, ...result });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to sync Tyler Gaulden sermons' });
+      }
+    });
+
+    // On-demand route to re-seed 10 RU spiritual principles
+    app.post('/api/bible/sync/ru-principles', async (_req, res) => {
+      try {
+        const result = seedRU10Principles(bibleDB);
+        res.json({ success: true, ...result });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to seed RU principles' });
+      }
+    });
 
     // On-demand route to trigger an instant sweep for Lighthouse Baptist Church
     app.post('/api/bible/sync/lighthouse', async (_req, res) => {
@@ -1229,16 +1488,8 @@ async function startServer() {
     });
   }
 
-  const server = http.createServer(app);
-  attachRealtime(server);
-  server.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Aura Server running on http://localhost:${PORT}`);
-    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-      console.warn('VAPID keys are loaded from data/auth.db. Persist that directory, or set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or closed-app alerts break after a restart.');
-    }
-    if (!hasTurnServer()) {
-      console.warn('TURN is not configured. Calls on restrictive mobile networks need TURN_URLS, TURN_USERNAME, and TURN_CREDENTIAL.');
-    }
   });
 }
 
