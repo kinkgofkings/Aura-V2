@@ -271,11 +271,11 @@ export const RecoveryDashboard: React.FC = () => {
             </button>
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('open_giving_modal'))}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95"
-              title="Support Ministry via Cash App ($LightsOutHoldingLLC)"
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95"
+              title="Give & Support Ministry"
             >
-              <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-              <span>Give 🙏 Cash App $LightsOutHoldingLLC</span>
+              <Heart className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span>Give</span>
             </button>
 
             {(user?.role === 'admin' ||

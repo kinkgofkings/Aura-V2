@@ -153,22 +153,17 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
               Spiritual & Kingdom Giving
             </p>
 
-            {/* Give 🙏 Section */}
+            {/* Give Section */}
             <button
               onClick={() =>
                 handleAction(() => {
                   window.dispatchEvent(new CustomEvent('open_giving_modal'));
                 })
               }
-              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-600/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 transition-all text-xs font-bold shadow-md shadow-amber-500/10 group"
+              className="w-full flex items-center gap-2.5 p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-600/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 transition-all text-xs font-bold shadow-md shadow-amber-500/10 group"
             >
-              <div className="flex items-center gap-2.5">
-                <Heart className="w-4 h-4 text-amber-400 fill-amber-400 group-hover:scale-110 transition-transform" />
-                <span>Give 🙏 Support Ministry</span>
-              </div>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500 text-slate-950 uppercase tracking-tight">
-                Cash App $LightsOutHoldingLLC
-              </span>
+              <Heart className="w-4 h-4 text-amber-400 fill-amber-400 group-hover:scale-110 transition-transform" />
+              <span>Give</span>
             </button>
 
             {/* Overcomer Workbook */}

@@ -546,8 +546,11 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                           <CreditCard className="w-4 h-4" />
                         </div>
                         <div>
-                          <div className="text-xs font-bold">Square Card Pay</div>
-                          <div className="text-[10px] text-slate-400">PNC Sync on Tuesday</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold">Square Card Pay</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/30 text-amber-300">Active</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400">Credit / Debit Card</div>
                         </div>
                       </button>
                     </div>
@@ -899,9 +902,9 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
                   </div>
 
                   <div className="p-2 rounded-xl bg-black/40 border border-white/10 space-y-1">
-                    <p className="font-bold text-amber-300">Step 4: Bank Account (PNC on Tuesday)</p>
+                    <p className="font-bold text-amber-300">Step 4: Bank Account (Connected)</p>
                     <p className="text-slate-300">
-                      To deposit card gifts directly into your bank, go to <a href="https://squareup.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline font-semibold">squareup.com/dashboard</a> → <strong>Settings</strong> → <strong>Bank Accounts</strong>, and link your PNC business checking once verification completes on Tuesday!
+                      Bank account connected to deposit card gifts directly into your ministry account.
                     </p>
                   </div>
                 </div>
