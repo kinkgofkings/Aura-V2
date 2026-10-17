@@ -1,12 +1,16 @@
-// Aura PWA Service Worker for Offline Caching and Push Notifications
-const CACHE_NAME = 'aura-pwa-v11';
+// Aura PWA Service Worker for Offline Caching, OTA Updates, and Push Notifications
+const CACHE_NAME = 'aura-pwa-v12';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/favicon.svg',
-  '/icons/icon-192.svg',
-  '/icons/icon-512.svg'
+  '/favicon.png',
+  '/icon.png',
+  '/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/app-icon.jpg',
+  '/splashscreen.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -29,6 +33,12 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && (event.data.type === 'SKIP_WAITING' || event.data === 'skipWaiting')) {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {

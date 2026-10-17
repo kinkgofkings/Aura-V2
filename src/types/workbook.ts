@@ -95,5 +95,6 @@ export interface GivingConfig {
   squareAccessToken?: string;
   cashAppCashtag?: string;
   ministryName: string;
+  parentCompany?: string;
   taxExemptNotice: string;
 }

@@ -1,30 +1,49 @@
 {
+  "id": "/",
   "short_name": "Aura",
-  "name": "Aura Social & WebRTC Chat",
-  "description": "Real-time chat, HD WebRTC calling, social photo feed, and daily inspiration.",
+  "name": "Aura — Lights Out Ministry",
+  "description": "Christ-centered Recovery, Deliverance, Discipleship & WebRTC Fellowship Sanctuary.",
   "icons": [
     {
-      "src": "/icons/icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon-192.png",
+      "src": "/icons/icon-192.png?v=3",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/favicon.png",
+      "src": "/icons/icon-192.png?v=3",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png?v=3",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png?v=3",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png?v=3",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png?v=3",
       "type": "image/png",
       "sizes": "48x48",
       "purpose": "any"
     }
   ],
   "start_url": "/",
-  "background_color": "#0d0802",
-  "theme_color": "#0d0802",
+  "background_color": "#05060f",
+  "theme_color": "#05060f",
   "display": "standalone",
   "orientation": "portrait",
   "scope": "/"

@@ -404,18 +404,42 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
               <UploadCloud className="w-3.5 h-3.5 text-teal-400" />
             </button>
 
+            {/* OTA Live Update & Icon Refresh */}
             <button
               id="super-menu-refresh-app"
-              onClick={() =>
-                handleAction(() => {
-                  soundEffects.playTap();
-                  window.location.reload();
-                })
-              }
-              className="w-full flex items-center gap-2.5 p-2.5 rounded-xl text-emerald-300 hover:text-white hover:bg-emerald-600/20 border border-emerald-500/20 transition-all text-xs font-semibold"
+              onClick={async () => {
+                soundEffects.playTap();
+                try {
+                  if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const reg of registrations) {
+                      await reg.update().catch(() => {});
+                      if (reg.waiting) {
+                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                      }
+                    }
+                  }
+                  if ('caches' in window) {
+                    const keys = await caches.keys();
+                    await Promise.all(
+                      keys.filter((k) => k !== 'aura-pwa-v12').map((k) => caches.delete(k))
+                    );
+                  }
+                  await fetch('/api/app-update/version', { cache: 'no-store' }).catch(() => {});
+                } catch (e) {
+                  console.warn('[OTA] Update check note:', e);
+                }
+                window.location.reload();
+              }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl text-emerald-300 hover:text-white hover:bg-emerald-600/20 border border-emerald-500/20 transition-all text-xs font-semibold"
             >
-              <RefreshCw className="w-4 h-4 text-emerald-400" />
-              <span>Refresh and Save App</span>
+              <div className="flex items-center gap-2.5">
+                <RefreshCw className="w-4 h-4 text-emerald-400" />
+                <span>Check OTA Updates & Refresh Icon</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold">
+                OTA Live
+              </span>
             </button>
           </div>
         </div>

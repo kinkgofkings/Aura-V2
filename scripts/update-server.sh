@@ -71,13 +71,19 @@ npm install --legacy-peer-deps --no-audit
 echo "🔨 Compiling Vite frontend and bundling server.cjs with esbuild..."
 npm run build
 
-# Ensure custom assets are also copied to dist for production static serving
-if [ -f "public/icon.png" ]; then
-  cp -f public/icon.png dist/icon.png 2>/dev/null || true
-fi
-if [ -f "public/splashscreen.png" ]; then
-  cp -f public/splashscreen.png dist/splashscreen.png 2>/dev/null || true
-fi
+# Ensure custom assets and PWA icons are also explicitly copied to dist for production static serving
+cp -f public/icon.png dist/icon.png 2>/dev/null || true
+cp -f public/app-icon.jpg dist/app-icon.jpg 2>/dev/null || true
+cp -f public/apple-touch-icon.png dist/apple-touch-icon.png 2>/dev/null || true
+cp -f public/favicon.png dist/favicon.png 2>/dev/null || true
+cp -rf public/icons dist/ 2>/dev/null || true
+cp -f public/manifest.json dist/manifest.json 2>/dev/null || true
+cp -f public/sw.js dist/sw.js 2>/dev/null || true
+cp -f public/splashscreen.png dist/splashscreen.png 2>/dev/null || true
+
+# Bump OTA version so mobile devices immediately detect and pull the update
+echo "{\"version\":\"$(date +%s%3N)\",\"url\":\"https://aura.webcraftstudio.cloud/dist.tar.gz\"}" > public/update-manifest.json
+cp -f public/update-manifest.json dist/update-manifest.json 2>/dev/null || true
 
 # 6. Synchronize YouTube series & sermon database
 echo "📖 Synchronizing sermon and Bible study library..."

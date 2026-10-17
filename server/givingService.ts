@@ -9,8 +9,9 @@ const GIVING_CONFIG_FILE = path.join(process.cwd(), 'data', 'giving_config.json'
 export class GivingService {
   private donations: DonationRecord[] = [];
   private config: GivingConfig = {
-    ministryName: 'Aura Sanctuary & Recovery Ministries',
-    taxExemptNotice: 'Thank you for your generous tax-deductible kingdom support. "God loveth a cheerful giver." (2 Cor 9:7)',
+    ministryName: 'Lights Out Baptist Ministry',
+    parentCompany: 'Lights Out Holding LLC',
+    taxExemptNotice: 'Thank you for your generous kingdom support of Lights Out Baptist Ministry (a ministry of Lights Out Holding LLC). "God loveth a cheerful giver." (2 Cor 9:7)',
     cashAppCashtag: '$LightsOutHoldingLLC',
     squareAppId: 'sandbox-sq0idb-AuraMinistryLive',
     squareLocationId: 'L8J4V9W2G0',

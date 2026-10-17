@@ -1542,14 +1542,32 @@ async function startServer() {
     console.error('Failed to initialize Recovery routes:', err);
   }
 
+  // --- PWA & OTA NO-CACHE HEADERS (Ensures mobile home screens receive live updates immediately) ---
+  app.use((req, res, next) => {
+    const p = req.path;
+    if (
+      p === '/sw.js' ||
+      p === '/manifest.json' ||
+      p === '/manifest.webmanifest' ||
+      p === '/update-manifest.json' ||
+      p.startsWith('/api/app-update')
+    ) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    next();
+  });
+
   // --- APP OTA UPDATE ROUTES ---
-  app.get("/api/app-update/version", (req, res) => {
+  app.get("/api/app-update/version", (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     try {
       const manifestPath = path.join(process.cwd(), "public", "update-manifest.json");
       if (fs.existsSync(manifestPath)) {
         return res.json(JSON.parse(fs.readFileSync(manifestPath, "utf8")));
       }
-      res.json({ version: "1.0.0", url: "https://aura.webcraftstudio.cloud/dist.zip" });
+      res.json({ version: Date.now().toString(), url: "https://aura.webcraftstudio.cloud/dist.tar.gz" });
     } catch (e) {
       res.status(500).json({ error: "Failed to read manifest" });
     }

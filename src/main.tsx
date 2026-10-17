@@ -54,9 +54,51 @@ if (typeof window !== "undefined") {
       });
     }
   } else if ("serviceWorker" in navigator) {
-    // Production PWA mode on custom domain
-    navigator.serviceWorker.register("/sw.js").catch((err) => {
-      console.warn("Service worker registration note:", err);
+    // Production PWA mode: proactive OTA background updates and icon sync
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        // Immediate check for newer sw.js on launch
+        registration.update().catch(() => {});
+
+        // Re-check for OTA updates whenever the phone is unlocked or user switches back to the app
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") {
+            registration.update().catch(() => {});
+          }
+        });
+        window.addEventListener("focus", () => {
+          registration.update().catch(() => {});
+        });
+
+        // Periodic background update check every 15 minutes
+        setInterval(() => {
+          registration.update().catch(() => {});
+        }, 15 * 60 * 1000);
+
+        // When a newer version of sw.js is installed, tell it to take over immediately
+        registration.addEventListener("updatefound", () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener("statechange", () => {
+              if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: "SKIP_WAITING" });
+              }
+            });
+          }
+        });
+      })
+      .catch((err) => {
+        console.warn("Service worker registration note:", err);
+      });
+
+    // When the new worker takes control, refresh smoothly once to apply all new assets
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
     });
   }
 }
