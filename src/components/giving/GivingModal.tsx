@@ -245,28 +245,29 @@ export const GivingModal: React.FC<GivingModalProps> = ({ isOpen, onClose }) => 
     >
       <div className="relative w-full max-w-xl bg-[#090b17] border border-amber-500/30 rounded-3xl shadow-2xl shadow-amber-500/10 overflow-hidden flex flex-col my-auto max-h-[92vh]">
         {/* Header */}
-        <div className="relative px-6 pt-6 pb-4 bg-gradient-to-b from-amber-950/40 via-amber-900/10 to-transparent border-b border-white/10">
+        <div className="relative p-4 sm:p-6 bg-gradient-to-b from-amber-950/40 via-amber-900/10 to-transparent border-b border-white/10 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 sm:top-5 sm:right-5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 shadow-lg shadow-black/50 z-20 group"
+            className="absolute top-3.5 right-3.5 sm:top-5 sm:right-5 p-2 sm:px-3 sm:py-1.5 rounded-full sm:rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-lg shadow-black/50 z-20 group"
             aria-label="Close Giving Window"
             title="Close (Esc)"
           >
             <X className="w-4 h-4 text-amber-400 group-hover:text-white transition-colors" />
-            <span className="font-extrabold tracking-wide">Close</span>
+            <span className="hidden sm:inline font-extrabold tracking-wide">Close</span>
           </button>
 
-          <div className="flex items-center gap-2.5 mb-1.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-500 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/30">
-              <Heart className="w-5 h-5 fill-slate-950" />
+          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 mb-1.5 pr-11 sm:pr-24">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-500 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/30 shrink-0 mt-0.5 sm:mt-0">
+              <Heart className="w-4 h-4 sm:w-5 sm:h-5 fill-slate-950" />
             </div>
-            <div>
-              <h2 className="text-xl font-black text-white tracking-wide flex items-center gap-2">
-                Kingdom Giving & Support <span className="text-amber-400">🙏</span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base sm:text-xl font-black text-white tracking-wide flex items-center gap-1.5 flex-wrap leading-tight">
+                <span>Kingdom Giving & Support</span>
+                <span className="text-amber-400">🙏</span>
               </h2>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-amber-300 font-bold">
+              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                <span className="text-[11px] sm:text-xs text-amber-300 font-bold truncate">
                   {config.ministryName || 'Lights Out Baptist Ministry'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-medium">

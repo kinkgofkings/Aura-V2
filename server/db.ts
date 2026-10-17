@@ -680,6 +680,54 @@ class JSONDatabase {
     return updated;
   }
 
+  public deleteUser(id: string): { success: boolean; error?: string } {
+    let index = this.data.users.findIndex((u) => u.id === id);
+    if (index === -1 && (id === 'user_tex' || id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || id.toLowerCase() === 'tex')) {
+      index = this.data.users.findIndex((u) => u.handle.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' || u.id === 'user_tex');
+    }
+    if (index === -1) {
+      index = this.data.users.findIndex((u) => u.handle.toLowerCase() === id.replace('@', '').toLowerCase());
+    }
+    if (index === -1) {
+      return { success: false, error: 'User not found' };
+    }
+
+    const targetUser = this.data.users[index];
+    if (targetUser.handle?.toLowerCase() === 'tex' || targetUser.email?.toLowerCase().includes('lightsouttattootex')) {
+      return { success: false, error: 'Cannot delete primary root super administrator.' };
+    }
+
+    const targetId = targetUser.id;
+    const targetHandle = targetUser.handle?.toLowerCase();
+
+    // 1. Remove from users array
+    this.data.users.splice(index, 1);
+
+    // 2. Remove from other users' follows
+    this.data.users.forEach((u) => {
+      if (Array.isArray(u.followingUserIds) && u.followingUserIds.includes(targetId)) {
+        u.followingUserIds = u.followingUserIds.filter((fid) => fid !== targetId);
+        u.followingCount = Math.max(0, (u.followingCount || 1) - 1);
+      }
+    });
+
+    // 3. Remove posts and stories authored by user
+    this.data.posts = this.data.posts.filter((p) => p.authorId !== targetId && p.authorHandle?.toLowerCase() !== targetHandle);
+    this.data.stories = this.data.stories.filter((s) => s.authorId !== targetId);
+
+    // 4. Remove from conversations
+    this.data.conversations = this.data.conversations.filter((c) => {
+      if (Array.isArray(c.participants)) {
+        c.participants = c.participants.filter((p) => p.id !== targetId);
+        return c.participants.length > 0;
+      }
+      return true;
+    });
+
+    this.saveDataDirect(this.data);
+    return { success: true };
+  }
+
   public toggleFollowUser(currentUserId: string, targetUserId: string): { isFollowing: boolean; targetFollowersCount: number; currentFollowingCount: number } | null {
     if (currentUserId === targetUserId) return null;
     const currentUser = this.getUserById(currentUserId);

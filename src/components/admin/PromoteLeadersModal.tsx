@@ -18,7 +18,8 @@ import {
   Award,
   BookOpen,
   Mic,
-  Upload
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
@@ -34,11 +35,13 @@ export const PromoteLeadersModal: React.FC<PromoteLeadersModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { allUsers, user: currentUser, promoteUserRole, provisionLeader } = useAuth();
+  const { allUsers, user: currentUser, promoteUserRole, provisionLeader, deleteUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'roster' | 'provision'>('roster');
+  const [deletingUser, setDeletingUser] = useState<UserProfile | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Expanded permissions accordion per user id
   const [expandedUserPerms, setExpandedUserPerms] = useState<Record<string, boolean>>({});
@@ -201,6 +204,26 @@ export const PromoteLeadersModal: React.FC<PromoteLeadersModalProps> = ({
       alert(err.message || 'Error provisioning leader');
     } finally {
       setIsProvisioning(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingUser) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteUser(deletingUser.id);
+      if (res.success) {
+        soundEffects.playLikeSparkle();
+        setToastMessage(`Member ${deletingUser.name || deletingUser.handle} has been removed and deleted.`);
+        setDeletingUser(null);
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        alert(res.error || 'Failed to delete member');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error deleting member');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -456,6 +479,21 @@ export const PromoteLeadersModal: React.FC<PromoteLeadersModalProps> = ({
                             <Save className="w-3.5 h-3.5" />
                             <span>Save Title</span>
                           </button>
+
+                          {!isSelf &&
+                            u.handle?.toLowerCase() !== 'tex' &&
+                            !u.email?.toLowerCase().includes('lightsouttattootex') && (
+                              <button
+                                type="button"
+                                disabled={updatingUserId === u.id || isDeleting}
+                                onClick={() => setDeletingUser(u)}
+                                className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold text-xs flex items-center gap-1 border border-red-500/30 transition-colors shrink-0"
+                                title="Remove and permanently delete member from the platform"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Remove Member</span>
+                              </button>
+                            )}
                         </div>
 
                         {/* Toggle Permissions Accordion */}
@@ -738,6 +776,54 @@ export const PromoteLeadersModal: React.FC<PromoteLeadersModalProps> = ({
           </form>
         )}
       </div>
+
+      {/* Delete Member Confirmation Dialog */}
+      {deletingUser && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#0f111a] border border-red-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="w-11 h-11 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Remove & Delete Member</h3>
+                <p className="text-xs text-slate-400">Permanent account removal</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to permanently remove and delete{' '}
+              <strong className="text-white">{deletingUser.name}</strong> (@{deletingUser.handle})? This action will revoke their login access and remove their member records from the fellowship.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingUser(null)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-300 font-bold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-lg shadow-red-500/20"
+              >
+                {isDeleting ? (
+                  <span>Deleting...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm & Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

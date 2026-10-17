@@ -350,6 +350,20 @@ async function startServer() {
     res.json(safeUser);
   });
 
+  // Remove & delete member from the platform
+  app.delete('/api/users/:id', (req, res) => {
+    try {
+      const targetId = req.params.id;
+      const result = db.deleteUser(targetId);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || 'Failed to delete member' });
+      }
+      res.json({ success: true, message: 'Member deleted successfully' });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || 'Error deleting member' });
+    }
+  });
+
   // Provision or pre-register a leader (e.g. Nick RU Director) before they log in
   app.post('/api/users/provision-leader', (req, res) => {
     try {

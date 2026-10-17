@@ -21,7 +21,7 @@ import {
   ConfirmationResult,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, onSnapshot, collection, query, getDocs, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, collection, query, getDocs, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { notificationService } from '../services/notifications';
 import { api } from '../services/api';
 
@@ -77,6 +77,7 @@ interface AuthContextType {
     position?: string;
     permissions?: UserProfile['permissions'];
   }) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
+  deleteUser: (targetUserId: string) => Promise<{ success: boolean; error?: string }>;
   
   isOnline: boolean;
   isServerConnected: boolean;
@@ -841,6 +842,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const deleteUser = async (targetUserId: string) => {
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(targetUserId)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || 'Failed to delete member' };
+
+      // Immediately update allUsers in state
+      setAllUsers((prev) => prev.filter((u) => u.id !== targetUserId && u.handle !== targetUserId));
+
+      // Attempt Firestore doc deletion if configured
+      if (isFirebaseConfigured && db) {
+        try {
+          const userDocRef = doc(db, 'users', targetUserId);
+          await deleteDoc(userDocRef);
+        } catch (e) {
+          console.warn('Firestore delete doc notice:', e);
+        }
+      }
+
+      // If user deleted themselves, log out
+      if (user && (user.id === targetUserId || user.handle === targetUserId)) {
+        logout();
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to delete member' };
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user, allUsers, isAuthModalOpen, setIsAuthModalOpen, openAuthModal,
@@ -848,7 +881,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signInWithGoogle, signInWithFacebook, signInWithGithub,
       sendVerificationEmail, resetPassword,
       setupRecaptcha, sendPhoneCode, verifyPhoneCode,
-      updateProfile, setUserStatus, getUserById, followUser, promoteUserRole, provisionLeader,
+      updateProfile, setUserStatus, getUserById, followUser, promoteUserRole, provisionLeader, deleteUser,
       isOnline, isServerConnected
     }}>
       {children}

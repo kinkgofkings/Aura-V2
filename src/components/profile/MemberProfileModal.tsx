@@ -26,6 +26,7 @@ import {
   Crown,
   GraduationCap,
   User,
+  Trash2,
 } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -50,7 +51,7 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
   onClose,
   onOpenSelfEdit,
 }) => {
-  const { user: currentUser, allUsers, followUser, promoteUserRole } = useAuth();
+  const { user: currentUser, allUsers, followUser, promoteUserRole, deleteUser } = useAuth();
   const { startDirectConversation, setActiveConversationId } = useChat();
   const { startCall } = useCall();
   const { posts, likePost, stories } = useSocial();
@@ -62,6 +63,8 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
   const [viewStory, setViewStory] = useState(false);
   const [fetchedUser, setFetchedUser] = useState<UserProfile | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
 
   const cleanId = (userId || '').trim();
   const cleanHandle = cleanId.replace('@', '').toLowerCase();
@@ -622,6 +625,22 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
                           Admin
                         </button>
                       </div>
+
+                      {targetUser.handle?.toLowerCase() !== 'tex' &&
+                        !targetUser.email?.toLowerCase().includes('lightsouttattootex') && (
+                          <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                            <span className="text-[11px] text-slate-400 font-medium">Remove Account</span>
+                            <button
+                              type="button"
+                              disabled={isDeletingMember}
+                              onClick={() => setShowDeleteConfirm(true)}
+                              className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-xs flex items-center gap-1 border border-red-500/30 transition-all"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete Member</span>
+                            </button>
+                          </div>
+                        )}
                     </div>
                   )}
               </div>
@@ -629,6 +648,71 @@ export const MemberProfileModal: React.FC<MemberProfileModalProps> = ({
           </div>
         </div>
       </motion.div>
+
+      {/* Delete Member Confirmation Modal */}
+      {showDeleteConfirm && targetUser && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div className="w-full max-w-sm bg-[#0c1024] border border-red-500/40 rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Delete Member</h3>
+                <p className="text-[11px] text-slate-400">Permanently remove user</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to delete <strong>{targetUser.name}</strong> (@{targetUser.handle})? All of their access, posts, and fellowship profile will be permanently removed.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                disabled={isDeletingMember}
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-300 font-bold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingMember}
+                onClick={async () => {
+                  setIsDeletingMember(true);
+                  try {
+                    const res = await deleteUser(targetUser.id);
+                    if (res.success) {
+                      setShowDeleteConfirm(false);
+                      onClose();
+                    } else {
+                      alert(res.error || 'Failed to delete member');
+                    }
+                  } catch (err: any) {
+                    alert(err.message || 'Error deleting member');
+                  } finally {
+                    setIsDeletingMember(false);
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-lg shadow-red-500/20"
+              >
+                {isDeletingMember ? (
+                  <span>Deleting...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Story Viewer Overlay */}
       {viewStory && hasActiveStory && (
