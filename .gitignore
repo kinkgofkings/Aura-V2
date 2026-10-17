@@ -17,6 +17,9 @@ firebase-applet-config.json
 # Logs & Temporary files
 *.log
 .DS_Store
+bun.lock
+bun.lockb
+.dev.*
 .aider*
 *.bak*
 *.patch
