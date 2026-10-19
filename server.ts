@@ -11,6 +11,7 @@ import { initializeBibleDB } from './server/bible/init';
 import { createAuthRoutes } from './routes/auth';
 import { AuthService } from './services/authService';
 import { createRecoveryRoutes } from './routes/recovery';
+import radioRouter from './routes/radio';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import multer from 'multer';
@@ -1649,6 +1650,13 @@ async function startServer() {
     app.use('/api/recovery', recoveryRoutes);
   } catch (err) {
     console.error('Failed to initialize Recovery routes:', err);
+  }
+
+  // --- LIVE RADIO TUNER (REFNET / RENEWING YOUR MIND) ROUTES ---
+  try {
+    app.use('/api/radio', radioRouter);
+  } catch (err) {
+    console.error('Failed to initialize Radio routes:', err);
   }
 
   // --- PWA & OTA NO-CACHE HEADERS (Ensures mobile home screens receive live updates immediately) ---

@@ -718,7 +718,7 @@ class JSONDatabase {
 
     // 3. Remove posts and stories authored by user
     this.data.posts = this.data.posts.filter((p) => p.authorId !== targetId && p.authorHandle?.toLowerCase() !== targetHandle);
-    this.data.stories = this.data.stories.filter((s) => s.authorId !== targetId);
+    this.data.stories = this.data.stories.filter((s) => s.userId !== targetId && (s as any).authorId !== targetId);
 
     // 4. Remove from conversations
     this.data.conversations = this.data.conversations.filter((c) => {
