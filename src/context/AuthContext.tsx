@@ -288,17 +288,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setAllUsers(data);
-          const activeUserRaw = localStorage.getItem('aura_active_user');
-          if (activeUserRaw) {
-            try {
-              const parsed = JSON.parse(activeUserRaw);
-              if (parsed && (parsed.handle === 'tex' || (parsed.email && parsed.email.includes('lightsouttattootex')))) {
-                const serverTex = data.find((u: any) => u.handle?.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1');
-                if (serverTex?.avatarUrl && (serverTex.avatarUrl.startsWith('data:') || !serverTex.avatarUrl.includes('dicebear'))) {
-                  setUserAndCache({ ...parsed, avatarUrl: serverTex.avatarUrl, name: 'Tex', handle: 'tex' });
-                }
+          const serverTex = data.find((u: any) => u.handle?.toLowerCase() === 'tex' || u.id === 'rvnvHGDInTWcFdzy9LZpKFsabgz1');
+          if (serverTex) {
+            setUser((current) => {
+              // If current user is Tex or has a dicebear avatar, adopt the canonical server profile
+              if (!current || current.handle === 'tex' || current.email?.includes('lightsouttattootex') || current.avatarUrl?.includes('dicebear')) {
+                const updated: UserProfile = {
+                  ...(current || {}),
+                  ...serverTex,
+                  avatarUrl: serverTex.avatarUrl || current?.avatarUrl,
+                  name: serverTex.name || 'Tex',
+                  handle: 'tex',
+                };
+                setUserAndCache(updated);
+                return updated;
               }
-            } catch {}
+              return current;
+            });
           }
         }
       })

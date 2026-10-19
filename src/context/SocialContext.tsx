@@ -90,9 +90,9 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             merged.push(sp);
           });
 
-          // Check if local has any temp/offline pending posts or recent local posts
+          // Check if local has any temp/offline pending posts (only truly pending posts, not stale cached ones)
           prevPosts.forEach((lp) => {
-            if ((lp.isPendingSync || (lp.id && lp.id.startsWith('post_'))) && !seenIds.has(lp.id)) {
+            if (lp.isPendingSync && !seenIds.has(lp.id)) {
               seenIds.add(lp.id);
               merged.unshift(lp);
 
@@ -628,7 +628,11 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const deleteStory = async (storyId: string) => {
     if (!user) return;
-    setStories((prev) => prev.filter((s) => s.id !== storyId));
+    setStories((prev) => {
+      const updated = prev.filter((s) => s.id !== storyId);
+      offlineStorage.save(STORAGE_KEYS.STORIES, updated);
+      return updated;
+    });
     offlineStorage.broadcastEvent('delete_story', { storyId });
     await api.deleteStory(storyId, user.id);
   };
@@ -636,7 +640,7 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const deleteStorySlide = async (storyId: string, slideId: string) => {
     if (!user) return;
     setStories((prev) => {
-      return prev
+      const updated = prev
         .map((s) => {
           if (s.id === storyId) {
             if (s.slides && s.slides.length > 1) {
@@ -655,6 +659,8 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return s;
         })
         .filter(Boolean) as UserStory[];
+      offlineStorage.save(STORAGE_KEYS.STORIES, updated);
+      return updated;
     });
     const updated = await api.deleteStorySlide(storyId, slideId, user.id);
     if (updated) {

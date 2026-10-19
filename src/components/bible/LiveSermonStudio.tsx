@@ -19,8 +19,10 @@ import { Play,
   FileVideo,
   Upload,
   Volume2,
+  RotateCcw,
   Share2, Image as ImageIcon, Search } from "lucide-react";
 import { AsyncMedia } from '../common/AsyncMedia';
+import { recordingStorage, RecordingMeta } from '../../services/recordingChunkStorage';
 
 interface Sermon {
   id: string;
@@ -164,6 +166,13 @@ export function LiveSermonStudio() {
   const chunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<any>(null);
 
+  // Storage session tracking for memory-leak-free unlimited recordings
+  const currentSessionIdRef = useRef<string>('');
+  const chunkIndexRef = useRef<number>(0);
+  const recordingSecondsRef = useRef<number>(0);
+  const [unrecoveredSessions, setUnrecoveredSessions] = useState<RecordingMeta[]>([]);
+  const [isRecovering, setIsRecovering] = useState<boolean>(false);
+
   // Load persistent sermons & courses from SQLite
   const fetchSermons = async () => {
     setLoadingArchive(true);
@@ -195,6 +204,14 @@ export function LiveSermonStudio() {
   useEffect(() => {
     fetchSermons();
     fetchCourses();
+
+    // Check for any unfinalized or interrupted recordings from prior sessions (e.g. crash or tab reload)
+    recordingStorage.getUnfinishedSessions().then((sessions) => {
+      if (sessions && sessions.length > 0) {
+        setUnrecoveredSessions(sessions);
+      }
+    }).catch(e => console.warn('IndexedDB recovery check error:', e));
+
     return () => {
       stopLive();
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -265,7 +282,7 @@ export function LiveSermonStudio() {
     setIsRecording(false);
   };
 
-  const startRecording = () => {
+  const startRecording = async () => {
     if (!streamRef.current) {
       showToast('Please start the camera first.', 'error');
       return;
@@ -273,6 +290,7 @@ export function LiveSermonStudio() {
 
     chunksRef.current = [];
     setRecordingSeconds(0);
+    recordingSecondsRef.current = 0;
 
     let options: MediaRecorderOptions | undefined = undefined;
     if (typeof MediaRecorder !== 'undefined') {
@@ -288,57 +306,129 @@ export function LiveSermonStudio() {
     }
 
     try {
+      // 1. Acquire screen wake lock so screen doesn't turn off / throttle at 22+ minutes
+      await recordingStorage.acquireWakeLock();
+
+      // 2. Start IndexedDB session to prevent browser RAM exhaustion (OOM crash)
+      const sId = 'rec_' + Date.now();
+      currentSessionIdRef.current = sId;
+      chunkIndexRef.current = 0;
+
+      const targetSeries = isSeries ? (selectedExistingSeries || seriesName.trim()) : seriesName.trim();
+      const chosenMime = options?.mimeType || 'video/webm';
+
+      await recordingStorage.startSession({
+        sessionId: sId,
+        startedAt: Date.now(),
+        title: sermonTitle.trim() || `Live Sermon - ${new Date().toLocaleDateString()}`,
+        speaker: speakerName.trim() || 'Pastor',
+        channel: channelName.trim() || 'Aura Community Pulpit',
+        series: targetSeries || 'Sunday Live',
+        seriesPart: isSeries ? seriesPart : 1,
+        scriptureRef: scriptureRef.trim(),
+        description: sermonNotes.trim(),
+        mimeType: chosenMime,
+        durationSeconds: 0,
+      });
+
       const mediaRecorder = options ? new MediaRecorder(streamRef.current, options) : new MediaRecorder(streamRef.current);
 
-      mediaRecorder.ondataavailable = (event) => {
+      mediaRecorder.ondataavailable = async (event) => {
         if (event.data && event.data.size > 0) {
-          chunksRef.current.push(event.data);
+          const idx = chunkIndexRef.current++;
+          // Write chunk directly to IndexedDB disk storage, eliminating JS heap RAM bloat
+          await recordingStorage.writeChunk(currentSessionIdRef.current, idx, event.data);
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        const finalDuration = recordingSeconds;
+        await recordingStorage.releaseWakeLock();
 
-        const mime = chunksRef.current[0]?.type || 'video/webm';
-        const blob = new Blob(chunksRef.current, { type: mime });
-        const previewUrl = URL.createObjectURL(blob);
-        const sizeMb = (blob.size / (1024 * 1024)).toFixed(2);
+        const finalDuration = recordingSecondsRef.current || recordingSeconds;
 
-        const targetSeries = isSeries ? (selectedExistingSeries || seriesName.trim()) : seriesName.trim();
-        const draft: RecordedDraft = {
-          blob,
-          previewUrl,
-          duration: finalDuration || 1,
-          mimeType: mime,
-          fileSizeMb: sizeMb,
-          title: sermonTitle.trim() || `Live Sermon - ${new Date().toLocaleDateString()}`,
-          scriptureRef: scriptureRef.trim(),
-          speaker: speakerName.trim() || 'Pastor',
-          channel: channelName.trim() || 'Aura Community Pulpit',
-          series: targetSeries || 'Sunday Live',
-          seriesPart: isSeries ? seriesPart : 1,
-          description: sermonNotes.trim()
-        };
+        try {
+          showToast('Assembling recording safely from disk...', 'success');
+          const { blob, meta } = await recordingStorage.finalizeSession(currentSessionIdRef.current, finalDuration);
+          const previewUrl = URL.createObjectURL(blob);
+          const sizeMb = (blob.size / (1024 * 1024)).toFixed(2);
 
-        setDraftForVerification(draft);
-        setIsRecording(false);
-        showToast('Recording finished! Please verify and approve before sending to Archive.');
+          const draft: RecordedDraft = {
+            blob,
+            previewUrl,
+            duration: finalDuration || 1,
+            mimeType: meta.mimeType || chosenMime,
+            fileSizeMb: sizeMb,
+            title: meta.title,
+            scriptureRef: meta.scriptureRef,
+            speaker: meta.speaker,
+            channel: meta.channel,
+            series: meta.series,
+            seriesPart: meta.seriesPart,
+            description: meta.description
+          };
+
+          setDraftForVerification(draft);
+          setIsRecording(false);
+          showToast('Recording finished safely via disk storage! Please verify and approve before sending to Archive.');
+        } catch (err: any) {
+          console.error('Failed to assemble recording chunks:', err);
+          showToast('Error finalizing recording: ' + err.message, 'error');
+          setIsRecording(false);
+        }
       };
 
-      mediaRecorder.start(1000);
+      mediaRecorder.start(1000); // 1-second chunks streamed directly to disk
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
 
       timerIntervalRef.current = setInterval(() => {
-        setRecordingSeconds(prev => prev + 1);
+        recordingSecondsRef.current += 1;
+        setRecordingSeconds(recordingSecondsRef.current);
       }, 1000);
 
-      showToast('Recording started! Speak clearly into the microphone.');
+      showToast('Recording started! Screen wake lock active. Unlimited recording time enabled.');
     } catch (err: any) {
       console.error('Failed to create MediaRecorder:', err);
       showToast('Could not initialize recording: ' + err.message, 'error');
     }
+  };
+
+  const handleRecoverSession = async (session: RecordingMeta) => {
+    setIsRecovering(true);
+    try {
+      const { blob, meta } = await recordingStorage.recoverSession(session.sessionId);
+      const previewUrl = URL.createObjectURL(blob);
+      const sizeMb = (blob.size / (1024 * 1024)).toFixed(2);
+      const draft: RecordedDraft = {
+        blob,
+        previewUrl,
+        duration: meta.durationSeconds || Math.max(1, Math.round(meta.chunkCount)),
+        mimeType: meta.mimeType || 'video/webm',
+        fileSizeMb: sizeMb,
+        title: meta.title || `Recovered Sermon - ${new Date(meta.startedAt).toLocaleDateString()}`,
+        scriptureRef: meta.scriptureRef || '',
+        speaker: meta.speaker || 'Pastor',
+        channel: meta.channel || 'Aura Community Pulpit',
+        series: meta.series || 'Sunday Live',
+        seriesPart: meta.seriesPart || 1,
+        description: meta.description || 'Interrupted session recovered from IndexedDB storage.'
+      };
+      setDraftForVerification(draft);
+      currentSessionIdRef.current = session.sessionId;
+      setUnrecoveredSessions(prev => prev.filter(s => s.sessionId !== session.sessionId));
+      showToast('Successfully restored previously interrupted recording! Review and save below.');
+    } catch (err: any) {
+      showToast('Could not restore recording: ' + err.message, 'error');
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
+  const handleDiscardSession = async (sessionId: string) => {
+    await recordingStorage.discardSession(sessionId);
+    setUnrecoveredSessions(prev => prev.filter(s => s.sessionId !== sessionId));
+    showToast('Discarded saved recording.');
   };
 
   const stopRecording = () => {
@@ -384,7 +474,11 @@ export function LiveSermonStudio() {
           setSelectedSermon(data.sermon);
           showToast(`Sermon "${cleanTitle}" successfully verified and saved to Archives!`);
           
-          // Cleanup draft
+          // Cleanup draft & reclaim IndexedDB space
+          if (currentSessionIdRef.current) {
+            recordingStorage.discardSession(currentSessionIdRef.current).catch(() => {});
+            currentSessionIdRef.current = '';
+          }
           URL.revokeObjectURL(draftForVerification.previewUrl);
           setDraftForVerification(null);
           setSermonTitle('');
@@ -395,6 +489,9 @@ export function LiveSermonStudio() {
           setSelectedExistingSeries('');
           setSermonNotes('');
           setActiveTab('archive');
+
+          // Broadcast to top announcement streamer & app feed
+          window.dispatchEvent(new CustomEvent('new_sermon_added', { detail: { sermon: data.sermon } }));
         }
       } else {
         showToast('Failed to save verified sermon to database.', 'error');
@@ -409,6 +506,10 @@ export function LiveSermonStudio() {
 
   const handleDiscardDraft = () => {
     if (confirm('Are you sure you want to discard this recording? This action cannot be undone.')) {
+      if (currentSessionIdRef.current) {
+        recordingStorage.discardSession(currentSessionIdRef.current).catch(() => {});
+        currentSessionIdRef.current = '';
+      }
       if (draftForVerification?.previewUrl) {
         URL.revokeObjectURL(draftForVerification.previewUrl);
       }
@@ -659,6 +760,54 @@ export function LiveSermonStudio() {
       {/* 1. Go Live / Preach Studio Section */}
       {activeTab === 'live' && (
         <div className="space-y-6">
+          {/* Crash Recovery Alert Banner */}
+          {unrecoveredSessions.length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 space-y-3 shadow-xl animate-in fade-in">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-5 h-5 text-amber-400" />
+                  <span className="font-extrabold text-sm text-white">
+                    Crash Recovery: {unrecoveredSessions.length} Interrupted Recording Session(s) Found!
+                  </span>
+                </div>
+                <span className="text-[11px] text-amber-300 font-semibold px-2 py-0.5 rounded-full bg-amber-500/20">
+                  Preserved in Disk Storage
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">
+                A prior sermon recording was interrupted (due to device sleep, battery loss, or unexpected tab reload). Your recorded audio/video chunks are safely preserved in browser disk storage.
+              </p>
+              <div className="space-y-2 pt-1">
+                {unrecoveredSessions.map(session => (
+                  <div key={session.sessionId} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-black/40 border border-amber-500/20 gap-2">
+                    <div>
+                      <div className="text-xs font-bold text-white">{session.title}</div>
+                      <div className="text-[11px] text-slate-400">
+                        Speaker: {session.speaker} • {session.chunkCount} chunks recorded • Recorded on {new Date(session.startedAt).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleRecoverSession(session)}
+                        disabled={isRecovering}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-black" />
+                        <span>{isRecovering ? 'Restoring...' : 'Restore & Review'}</span>
+                      </button>
+                      <button
+                        onClick={() => handleDiscardSession(session.sessionId)}
+                        className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-semibold transition-all"
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Sermon Details Form */}
           <div className="bg-[#090d24]/90 border border-amber-500/30 rounded-2xl p-4 sm:p-6 space-y-4 shadow-xl">
             <h3 className="text-base sm:text-lg font-bold text-amber-200 flex items-center gap-2">

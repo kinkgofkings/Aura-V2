@@ -22,7 +22,8 @@ import {
   Database,
   UploadCloud,
   Crown,
-  DollarSign
+  DollarSign,
+  Globe
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
@@ -368,6 +369,37 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
             >
               <Sliders className="w-4 h-4 text-amber-400" />
               <span>Audio/Video & Notifications Setup</span>
+            </button>
+
+            {/* Sync Live Data from Online App */}
+            <button
+              id="super-menu-sync-live"
+              onClick={async () => {
+                soundEffects.play('pop');
+                try {
+                  const res = await fetch('/api/system/sync-live', { method: 'POST' });
+                  const data = await res.json();
+                  if (data.success) {
+                    soundEffects.play('success');
+                    window.dispatchEvent(new CustomEvent('refresh_feed'));
+                    alert(`🎉 Successfully synchronized live app data!\n• ${data.usersCount} Active Members\n• ${data.postsCount} Feed Posts\n• ${data.conversationsCount || 0} Fellowship Chats`);
+                    window.location.reload();
+                  } else {
+                    alert(`Sync note: ${data.error || 'Failed to sync'}`);
+                  }
+                } catch (e: any) {
+                  alert(`Sync error: ${e.message || 'Failed'}`);
+                }
+              }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl text-sky-300 hover:text-white hover:bg-sky-600/20 border border-sky-500/20 transition-all text-xs font-semibold"
+            >
+              <div className="flex items-center gap-2.5">
+                <Globe className="w-4 h-4 text-sky-400" />
+                <span>Sync Live Data from Online App</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono font-bold">
+                1-Tap Live
+              </span>
             </button>
 
             {/* Sync Phone Cached Posts */}

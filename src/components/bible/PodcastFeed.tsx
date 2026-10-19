@@ -87,6 +87,11 @@ export function PodcastFeed({
   const [selectedSeries, setSelectedSeries] = useState<string>("all");
   const [activeSeriesContainer, setActiveSeriesContainer] = useState<string | null>(null);
 
+  // Sunday, Powerhouse & Recency Filters
+  const [onlySunday, setOnlySunday] = useState<boolean>(false);
+  const [onlyPowerhouse, setOnlyPowerhouse] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'alpha'>('recent');
+
   const [highlightedSermonId, setHighlightedSermonId] = useState<string | null>(() => {
     try {
       return localStorage.getItem('aura_target_sermon_id') || sessionStorage.getItem('aura_target_sermon_id');
@@ -302,6 +307,25 @@ export function PodcastFeed({
     }
   };
 
+  const [syncingAllBaptist, setSyncingAllBaptist] = useState(false);
+
+  const handleSyncAllBaptist = async () => {
+    setSyncingAllBaptist(true);
+    setSyncSuccessMsg(null);
+    try {
+      soundEffects.playTap();
+      const res = await fetch('/api/bible/sync/all-feeds', { method: 'POST' });
+      const data = await res.json();
+      await fetchAllSermons();
+      setSyncSuccessMsg(`Refreshed! +${data.totalAudioAdded || 0} sermons added across local Baptist channels (LBC Winchester, Shenandoah Valley & RU Recovery).`);
+      setTimeout(() => setSyncSuccessMsg(null), 6000);
+    } catch (err: any) {
+      console.error('Error syncing Baptist feeds:', err);
+    } finally {
+      setSyncingAllBaptist(false);
+    }
+  };
+
   const handleOpenVideoModal = (sermon: SermonItem) => {
     soundEffects.playTap();
     setSelectedVideo(sermon);
@@ -336,6 +360,18 @@ export function PodcastFeed({
     }
   };
 
+  // Powerhouse Spotlight Sermon of the Week candidate
+  const spotlightSermon = useMemo(() => {
+    if (sermons.length === 0) return null;
+    return sermons.find(s => 
+      s.title?.toLowerCase().includes('god is able') || 
+      s.title?.toLowerCase().includes('power') || 
+      s.title?.toLowerCase().includes('spirit') || 
+      s.title?.toLowerCase().includes('revival') || 
+      s.title?.toLowerCase().includes('grace')
+    ) || sermons[0];
+  }, [sermons]);
+
   // Channels and series available for the current format
   const availableChannels = useMemo(() => {
     const set = new Set<string>();
@@ -368,51 +404,69 @@ export function PodcastFeed({
   }, [sermons, formatFilter]);
 
   const filtered = useMemo(() => {
-    const list = sermons.filter((item) => {
-    if (formatFilter !== "all" && item.format !== formatFilter) return false;
-    if (sourceFilter === "stories") {
-      const isStory = 
-        item.title?.toLowerCase().includes("audio story") || 
-        item.title?.toLowerCase().includes("story:") ||
-        item.topics?.some((t) => t.slug === "audio-stories" || t.name.toLowerCase().includes("story"));
-      if (!isStory) return false;
-    } else if (sourceFilter !== "all" && item.source !== sourceFilter) {
-      return false;
-    }
-
-    // Channel filter (with support for Lighthouse Baptist Church and RU Recovery)
-    if (selectedChannel !== "all") {
-      const qCh = selectedChannel.toLowerCase();
-      const itemCh = (item.channel || "").toLowerCase();
-      const itemSpk = (item.speaker || "").toLowerCase();
-      const isRuMatch = 
-        (qCh.includes("ru recovery") || qCh.includes("reformers")) && 
-        (itemCh.includes("ru recovery") || itemCh.includes("reformers") || itemSpk.includes("reformers"));
-      const isLbcMatch =
-        (qCh.includes("lighthouse") || qCh.includes("shope")) &&
-        (itemCh.includes("lighthouse") || itemSpk.includes("shope") || itemSpk.includes("lighthouse"));
-
-      const matchCh = isRuMatch || isLbcMatch || itemCh === qCh || itemCh.includes(qCh) || itemSpk.includes(qCh);
-      if (!matchCh) return false;
-    }
-
-    // Series filter
-    if (selectedSeries !== "all") {
-      if (!item.series || item.series.toLowerCase() !== selectedSeries.toLowerCase()) {
+    let list = sermons.filter((item) => {
+      if (formatFilter !== "all" && item.format !== formatFilter) return false;
+      if (sourceFilter === "stories") {
+        const isStory = 
+          item.title?.toLowerCase().includes("audio story") || 
+          item.title?.toLowerCase().includes("story:") ||
+          item.topics?.some((t) => t.slug === "audio-stories" || t.name.toLowerCase().includes("story"));
+        if (!isStory) return false;
+      } else if (sourceFilter !== "all" && item.source !== sourceFilter) {
         return false;
       }
-    }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = item.title?.toLowerCase().includes(q);
-      const matchSpeaker = item.speaker?.toLowerCase().includes(q);
-      const matchRef = item.scriptureRef?.toLowerCase().includes(q);
-      const matchSeries = item.series?.toLowerCase().includes(q);
-      const matchChannel = item.channel?.toLowerCase().includes(q);
-      if (!matchTitle && !matchSpeaker && !matchRef && !matchSeries && !matchChannel) return false;
-    }
-    return true;
+      // Sunday sermons filter
+      if (onlySunday) {
+        const textCheck = (item.title + ' ' + (item.series || '')).toLowerCase();
+        let isSunday = textCheck.includes('sunday');
+        if (!isSunday && (item.date || item.publishedAt)) {
+          const d = new Date(item.date || item.publishedAt || '');
+          if (!isNaN(d.getTime()) && d.getDay() === 0) isSunday = true;
+        }
+        if (!isSunday) return false;
+      }
+
+      // Spotlight Powerhouse messages filter
+      if (onlyPowerhouse) {
+        const textCheck = (item.title + ' ' + (item.summary || '')).toLowerCase();
+        const isPower = textCheck.includes('power') || textCheck.includes('spirit') || textCheck.includes('revival') || textCheck.includes('freedom') || textCheck.includes('grace') || textCheck.includes('god is able');
+        if (!isPower) return false;
+      }
+
+      // Channel filter (with support for Lighthouse Baptist Church and RU Recovery)
+      if (selectedChannel !== "all") {
+        const qCh = selectedChannel.toLowerCase();
+        const itemCh = (item.channel || "").toLowerCase();
+        const itemSpk = (item.speaker || "").toLowerCase();
+        const isRuMatch = 
+          (qCh.includes("ru recovery") || qCh.includes("reformers")) && 
+          (itemCh.includes("ru recovery") || itemCh.includes("reformers") || itemSpk.includes("reformers"));
+        const isLbcMatch =
+          (qCh.includes("lighthouse") || qCh.includes("shope")) &&
+          (itemCh.includes("lighthouse") || itemSpk.includes("shope") || itemSpk.includes("lighthouse"));
+
+        const matchCh = isRuMatch || isLbcMatch || itemCh === qCh || itemCh.includes(qCh) || itemSpk.includes(qCh);
+        if (!matchCh) return false;
+      }
+
+      // Series filter
+      if (selectedSeries !== "all") {
+        if (!item.series || item.series.toLowerCase() !== selectedSeries.toLowerCase()) {
+          return false;
+        }
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = item.title?.toLowerCase().includes(q);
+        const matchSpeaker = item.speaker?.toLowerCase().includes(q);
+        const matchRef = item.scriptureRef?.toLowerCase().includes(q);
+        const matchSeries = item.series?.toLowerCase().includes(q);
+        const matchChannel = item.channel?.toLowerCase().includes(q);
+        if (!matchTitle && !matchSpeaker && !matchRef && !matchSeries && !matchChannel) return false;
+      }
+      return true;
     });
 
     const qCh = selectedChannel.toLowerCase();
@@ -421,15 +475,36 @@ export function PodcastFeed({
       return [...list].sort((a, b) => (a.seriesPart || 999) - (b.seriesPart || 999));
     }
 
-    return list;
-  }, [sermons, formatFilter, sourceFilter, selectedChannel, selectedSeries, searchQuery]);
+    if (sortBy === 'recent') {
+      return [...list].sort((a, b) => {
+        const tA = new Date(a.date || a.publishedAt || 0).getTime();
+        const tB = new Date(b.date || b.publishedAt || 0).getTime();
+        return tB - tA;
+      });
+    } else if (sortBy === 'alpha') {
+      return [...list].sort((a, b) => a.title.localeCompare(b.title));
+    }
 
-  const handleShareSermon = (sermon: SermonItem) => {
+    return list;
+  }, [sermons, formatFilter, sourceFilter, selectedChannel, selectedSeries, searchQuery, onlySunday, onlyPowerhouse, sortBy]);
+
+  const handleShareSermon = async (sermon: SermonItem) => {
     soundEffects.playTap();
+    const shareText = `🎙️ "${sermon.title}" by ${sermon.speaker || 'Pastor'}${sermon.scriptureRef ? ` (${sermon.scriptureRef})` : ''} • Stream now on AURA Sanctuary`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: sermon.title,
+          text: shareText,
+          url: window.location.href,
+        });
+        return;
+      } catch {}
+    }
     window.dispatchEvent(
       new CustomEvent('open_create_post', {
         detail: {
-          content: `🎙️ Check out this sermon: "${sermon.title}" by ${sermon.speaker}${sermon.scriptureRef ? ` (${sermon.scriptureRef})` : ''} in the Sanctuary Pulpit!\n\n#Sermon #SanctuaryWord #${(sermon.channel || 'Pulpit').replace(/[^a-zA-Z0-9]/g, '')}`,
+          content: `${shareText}\n\n#Sermon #SanctuaryWord #${(sermon.channel || 'Pulpit').replace(/[^a-zA-Z0-9]/g, '')}`,
           tags: 'Sermon,SanctuaryWord'
         }
       })
@@ -584,6 +659,76 @@ export function PodcastFeed({
           </div>
         </div>
 
+        {/* QUICK FILTER BAR: Sunday Sermons, Recency Sort, Powerhouse & Baptist Sync */}
+        <div className="bg-[#0b0f19]/90 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/10 flex items-center justify-between gap-2 overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+            <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Filters:</span>
+            </span>
+
+            {/* Sunday Sermons Filter */}
+            <button
+              type="button"
+              onClick={() => {
+                soundEffects.playTap();
+                setOnlySunday(prev => !prev);
+              }}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                onlySunday
+                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 border border-rose-400/40'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+              }`}
+            >
+              <span>📅 Sunday Sermons</span>
+              {onlySunday && <span className="text-[10px] bg-black/40 px-1.5 py-0.2 rounded-full">Active</span>}
+            </button>
+
+            {/* Powerhouse Spotlight Filter */}
+            <button
+              type="button"
+              onClick={() => {
+                soundEffects.playTap();
+                setOnlyPowerhouse(prev => !prev);
+              }}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                onlyPowerhouse
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30 border border-amber-400/40'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
+              }`}
+            >
+              <Flame className="w-3 h-3 text-amber-300" />
+              <span>🕊️ Holy Spirit Powerhouse</span>
+              {onlyPowerhouse && <span className="text-[10px] bg-black/40 px-1.5 py-0.2 rounded-full">Active</span>}
+            </button>
+
+            {/* Sort Toggle: Recent vs Alpha */}
+            <button
+              type="button"
+              onClick={() => {
+                soundEffects.playTap();
+                setSortBy(prev => prev === 'recent' ? 'alpha' : 'recent');
+              }}
+              className="px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 cursor-pointer"
+            >
+              <Clock className="w-3 h-3 text-amber-400" />
+              <span>Sort: {sortBy === 'recent' ? '⚡ Most Recent' : '🔤 Title A-Z'}</span>
+            </button>
+          </div>
+
+          {/* Sync All Baptist Feeds Button */}
+          <button
+            type="button"
+            onClick={handleSyncAllBaptist}
+            disabled={syncingAllBaptist}
+            className="px-3.5 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white shadow-md shadow-amber-500/20 disabled:opacity-50 flex-shrink-0 cursor-pointer"
+            title="Synchronize all local Baptist feeds (Lighthouse Winchester, Shenandoah Valley & RU)"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${syncingAllBaptist ? 'animate-spin' : ''}`} />
+            <span>{syncingAllBaptist ? 'Syncing Baptist Feeds...' : 'Sync Local Feeds'}</span>
+          </button>
+        </div>
+
         {/* CHANNELS ROW */}
         {availableChannels.length > 0 && (
           <div className="bg-[#0b0f19]/80 backdrop-blur-md px-3.5 py-2.5 rounded-2xl border border-white/10 flex items-center gap-2 overflow-x-auto scrollbar-none">
@@ -720,6 +865,94 @@ export function PodcastFeed({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* POWERHOUSE SPOTLIGHT SERMON OF THE WEEK */}
+      {selectedSeries === "all" && !searchQuery.trim() && spotlightSermon && (
+        <div className="relative rounded-3xl overflow-hidden border border-amber-500/35 bg-gradient-to-br from-amber-950/40 via-[#0a0f26] to-[#0a0d14] p-5 sm:p-6 shadow-2xl space-y-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 text-xs font-black uppercase tracking-wider border border-amber-500/40 flex items-center gap-1.5 shadow-md">
+              <Flame className="w-4 h-4 text-orange-400" />
+              <span>🕊️ Spotlight Sermon of the Week • Holy Spirit Powerhouse</span>
+            </span>
+            <span className="text-[11px] text-amber-300/80 font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+              Community Recommendation
+            </span>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-5 items-center">
+            {/* Thumbnail Preview */}
+            <div 
+              onClick={() => {
+                if (spotlightSermon.format === 'video') handleOpenVideoModal(spotlightSermon);
+                else handlePlayAudio(spotlightSermon);
+              }}
+              className="relative w-full md:w-72 aspect-video rounded-2xl overflow-hidden border border-amber-500/30 group cursor-pointer shrink-0 shadow-lg"
+            >
+              <img
+                src={getSermonCoverImage(spotlightSermon, 0)}
+                alt={spotlightSermon.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                  <Play className="w-5 h-5 fill-black ml-0.5" />
+                </div>
+              </div>
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] text-white font-bold">
+                <span className="bg-black/70 px-2 py-0.5 rounded-md">{spotlightSermon.format === 'video' ? 'HD Video' : 'Audio Sermon'}</span>
+                <span className="bg-amber-600/80 px-2 py-0.5 rounded-md text-white">{spotlightSermon.duration || 'Full Message'}</span>
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="space-y-2 flex-1 min-w-0">
+              <h3 className="text-lg sm:text-xl font-black text-white hover:text-amber-300 transition-colors leading-snug">
+                {spotlightSermon.title}
+              </h3>
+              <p className="text-xs font-semibold text-amber-300 flex items-center gap-2">
+                <User className="w-3.5 h-3.5" />
+                <span>{spotlightSermon.speaker || 'Pastor'} • {spotlightSermon.channel || 'Sanctuary Pulpit'}</span>
+              </p>
+              {spotlightSermon.scriptureRef && (
+                <p className="text-xs text-slate-300 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Scripture: {spotlightSermon.scriptureRef}</span>
+                </p>
+              )}
+              {spotlightSermon.summary && (
+                <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
+                  {spotlightSermon.summary}
+                </p>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 pt-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (spotlightSermon.format === 'video') handleOpenVideoModal(spotlightSermon);
+                    else handlePlayAudio(spotlightSermon);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/25 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Play className="w-3.5 h-3.5 fill-white" />
+                  <span>{spotlightSermon.format === 'video' ? 'Watch Spotlight Video' : 'Listen to Spotlight Audio'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleShareSermon(spotlightSermon)}
+                  className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white font-semibold text-xs flex items-center gap-1.5 border border-white/10 transition-all cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Share Sermon</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

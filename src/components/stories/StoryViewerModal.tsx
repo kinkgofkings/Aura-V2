@@ -59,7 +59,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   onClose,
   onOpenChat,
 }) => {
-  const { stories, markStorySeen, deleteStorySlide } = useSocial();
+  const { stories, markStorySeen, deleteStorySlide, deleteStory } = useSocial();
   const { user } = useAuth();
   const { sendStoryReply } = useChat();
 
@@ -82,6 +82,19 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
   // Current active user story
   const currentStory: UserStory | undefined = stories[userStoryIndex];
+
+  // Check if current user is the author or admin
+  const isAuthor = Boolean(
+    currentStory &&
+      (user?.id === currentStory.userId ||
+        ((user?.handle?.toLowerCase() === 'tex' || user?.email?.includes('lightsouttattootex')) &&
+          (currentStory.userName?.toLowerCase() === 'tex' ||
+            currentStory.userId === 'rvnvHGDInTWcFdzy9LZpKFsabgz1' ||
+            currentStory.userId === 'user_tex' ||
+            currentStory.userId === 'tex')) ||
+        user?.role === 'admin' ||
+        user?.isAdmin)
+  );
 
   // Resolve slides array for current user story
   const slides: StorySlide[] = useMemo(() => {
@@ -616,28 +629,38 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </button>
               )}
 
-              {/* Author Delete Slide Button */}
-              {user?.id === currentStory.userId && (
+              {/* Author / Admin Delete Slide Button */}
+              {isAuthor && (
                 <button
+                  id="delete-story-slide-btn"
                   type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onMouseUp={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
                   onClick={async (e) => {
                     e.stopPropagation();
-                    if (activeSlide) {
-                      soundEffects.playTap();
-                      await deleteStorySlide(currentStory.id, activeSlide.id);
+                    e.preventDefault();
+                    if (!currentStory) return;
+                    soundEffects.playTap();
+                    try {
                       if (slides.length <= 1) {
+                        await deleteStory(currentStory.id);
                         onClose();
-                      } else {
+                      } else if (activeSlide) {
+                        await deleteStorySlide(currentStory.id, activeSlide.id);
                         setCurrentSlideIndex((prev) => Math.max(0, prev - 1));
                         setProgress(0);
                       }
+                    } catch (err) {
+                      console.error('Failed to delete story slide:', err);
                     }
                   }}
-                  className="p-1.5 px-2 rounded-full bg-red-500/20 hover:bg-red-500/40 border border-red-400/30 text-red-300 hover:text-red-100 transition-all flex items-center gap-1 text-xs backdrop-blur-md"
+                  className="p-1.5 px-2.5 rounded-full bg-red-500/30 hover:bg-red-500/50 border border-red-400/50 text-red-200 hover:text-white transition-all flex items-center gap-1 text-xs backdrop-blur-md shadow-lg active:scale-95"
                   title="Delete this slide from your story"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline text-[10px] font-medium">Delete</span>
+                  <span className="text-[10px] font-bold">Delete</span>
                 </button>
               )}
 

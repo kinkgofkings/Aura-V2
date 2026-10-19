@@ -20,6 +20,8 @@ import { startLighthouseDailyScheduler, syncLighthouseSermons } from './services
 import { seedRU10Principles, syncTylerGauldenSermons } from './services/tylerGauldenSyncService';
 import { workbookService } from './server/workbookService';
 import { givingService } from './server/givingService';
+import { syncFromProduction } from './scripts/sync-live-data';
+import { sermonIngestionService, startWeeklySermonScheduler } from './server/sermonIngestionService';
 
 /**
  * Decodes base64 media data URIs into static files on disk (public/uploads/posts/)
@@ -142,6 +144,32 @@ async function startServer() {
   });
 
   app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+
+  // Fallback proxy for uploads from live production server (stories, posts, member media)
+  app.get('/uploads/*', async (req, res, next) => {
+    const relativePath = req.path;
+    const localPath = path.join(process.cwd(), 'public', relativePath);
+    if (fs.existsSync(localPath)) {
+      return res.sendFile(localPath);
+    }
+    const remoteUrl = `https://aura.webcraftstudio.cloud${relativePath}`;
+    try {
+      const remoteRes = await fetch(remoteUrl);
+      if (remoteRes.ok) {
+        const targetDir = path.dirname(localPath);
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+        const arrayBuf = await remoteRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuf);
+        fs.writeFileSync(localPath, buffer);
+        const contentType = remoteRes.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        return res.send(buffer);
+      }
+    } catch (e) {
+      // ignore
+    }
+    res.status(404).send('Upload media not found');
+  });
   app.use('/courses', express.static(path.join(process.cwd(), 'public', 'courses')));
   app.use('/assets', express.static(path.join(process.cwd(), 'assets')));
   app.use('/assets', express.static(path.join(process.cwd(), 'public', 'assets')));
@@ -246,6 +274,21 @@ async function startServer() {
     } catch (err: any) {
       console.error('[API sync-sermons Error]:', err);
       res.status(500).json({ error: err.message || 'Sync failed' });
+    }
+  });
+
+  // Sync live users, posts, and conversations from production app
+  app.post('/api/system/sync-live', async (req, res) => {
+    try {
+      const targetUrl = req.body?.url;
+      const result = await syncFromProduction(targetUrl);
+      if (result.success) {
+        db.reload();
+      }
+      res.json(result);
+    } catch (err: any) {
+      console.error('[API sync-live Error]:', err);
+      res.status(500).json({ error: err.message || 'Live sync failed' });
     }
   });
 
@@ -1458,6 +1501,9 @@ async function startServer() {
     // Start 3x daily automated scheduler for Lighthouse Baptist Church (@lighthousewinc)
     startLighthouseDailyScheduler(bibleDB);
 
+    // Start automated weekly delta synchronization for all Baptist & RU feeds
+    startWeeklySermonScheduler((bibleDB as any).db);
+
     // On-demand route to trigger an instant sweep for Tyler Gaulden channel
     app.post('/api/bible/sync/tyler-gaulden', async (_req, res) => {
       try {
@@ -1465,6 +1511,26 @@ async function startServer() {
         res.json({ success: true, ...result });
       } catch (err: any) {
         res.status(500).json({ error: err.message || 'Failed to sync Tyler Gaulden sermons' });
+      }
+    });
+
+    // On-demand route to trigger complete Baptist & RU Delta Feed Synchronization
+    app.post('/api/bible/sync/all-feeds', async (_req, res) => {
+      try {
+        const result = await sermonIngestionService.syncAllFeeds();
+        res.json({ success: true, ...result });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to synchronize all Baptist feeds' });
+      }
+    });
+
+    // On-demand route to purge any mock or dummy records cleanly
+    app.post('/api/bible/sync/purge-mocks', (_req, res) => {
+      try {
+        const result = sermonIngestionService.purgeMockSermons();
+        res.json({ success: true, ...result });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to purge mock sermons' });
       }
     });
 
@@ -1496,6 +1562,35 @@ async function startServer() {
       } catch (err: any) {
         console.error('[Community Sermons] Error:', err);
         res.status(500).json({ error: err.message || 'Failed to load sermons' });
+      }
+    });
+
+    // Get latest Sunday services and spotlight powerhouse sermons
+    app.get('/api/bible/sermons/recent', (_req, res) => {
+      try {
+        const rawDb = (bibleDB as any).db;
+        const allRecent = rawDb.prepare(`
+          SELECT * FROM sermons_podcasts 
+          ORDER BY dateRecorded DESC, createdAt DESC 
+          LIMIT 25
+        `).all();
+
+        // Also fetch spotlight candidate
+        const spotlight = rawDb.prepare(`
+          SELECT * FROM sermons_podcasts 
+          WHERE (title LIKE '%power%' OR title LIKE '%spirit%' OR title LIKE '%revival%' OR title LIKE '%grace%' OR title LIKE '%god is able%')
+            AND mediaUrl IS NOT NULL AND mediaUrl != ''
+          ORDER BY dateRecorded DESC 
+          LIMIT 1
+        `).get() || allRecent[0];
+
+        res.json({
+          recent: allRecent,
+          spotlight: spotlight || null,
+          total: allRecent.length
+        });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to fetch recent sermons' });
       }
     });
   } catch (err) {
@@ -1615,6 +1710,19 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Aura Server running on http://localhost:${PORT}`);
+
+    // If local database has 0 posts, auto-sync from live production app in background
+    if (db.getPosts().length === 0) {
+      console.log('🌱 [AURA] Database has 0 posts. Auto-syncing from live online app...');
+      syncFromProduction()
+        .then((res) => {
+          if (res.success) {
+            db.reload();
+            console.log(`✅ [AURA] Auto-synced ${res.usersCount} users and ${res.postsCount} posts from live app!`);
+          }
+        })
+        .catch((e) => console.warn('[AURA] Auto-sync notice:', e.message));
+    }
   });
 }
 
