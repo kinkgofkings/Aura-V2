@@ -72,7 +72,17 @@ export async function syncLighthouseSermons(db: BibleStudyDB): Promise<SyncedVid
     let addedCount = 0;
     let existingCount = 0;
 
+    (db as any).db.exec('CREATE TABLE IF NOT EXISTS deleted_sermons (id TEXT PRIMARY KEY, deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP)');
+
     for (const ytId of allCandidateIds) {
+      // Check if user permanently deleted this sermon
+      const isDeleted = (db as any).db
+        .prepare('SELECT id FROM deleted_sermons WHERE id = ?')
+        .get(`yt-${ytId}`);
+      if (isDeleted) {
+        continue;
+      }
+
       // Check if already archived
       const existing = (db as any).db
         .prepare('SELECT id FROM sermons_podcasts WHERE mediaUrl LIKE ? OR id = ?')

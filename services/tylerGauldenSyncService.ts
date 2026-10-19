@@ -213,7 +213,17 @@ export async function syncTylerGauldenSermons(db: BibleStudyDB): Promise<SyncedV
     let addedCount = 0;
     let existingCount = 0;
 
+    (db as any).db.exec('CREATE TABLE IF NOT EXISTS deleted_sermons (id TEXT PRIMARY KEY, deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP)');
+
     for (const ytId of allCandidateIds) {
+      // Check if user permanently deleted this sermon
+      const isDeleted = (db as any).db
+        .prepare('SELECT id FROM deleted_sermons WHERE id = ?')
+        .get(`yt-${ytId}`);
+      if (isDeleted) {
+        continue;
+      }
+
       const existing = (db as any).db
         .prepare('SELECT id FROM sermons_podcasts WHERE mediaUrl LIKE ? OR id = ?')
         .get(`%${ytId}%`, `yt-${ytId}`);

@@ -634,39 +634,91 @@ export function createBibleRoutes(db: BibleStudyDB): Router {
     }
   });
 
-  // PUT /api/bible/sermons/:id - Update sermon metadata
-  router.put('/sermons/:id', (req: Request, res: Response) => {
+  // GET /api/bible/sermons/deleted-ids - List of deleted sermon IDs to permanently suppress
+  router.get('/sermons/deleted-ids', (_req: Request, res: Response) => {
     try {
-      const updated = db.updateSermon(req.params.id, req.body);
-      if (!updated) return res.status(404).json({ error: 'Sermon not found' });
-      res.json(updated);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update sermon' });
+      const rawDb = (db as any).db;
+      rawDb.exec('CREATE TABLE IF NOT EXISTS deleted_sermons (id TEXT PRIMARY KEY, deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP)');
+      const rows = rawDb.prepare('SELECT id FROM deleted_sermons').all();
+      res.json({ deletedIds: rows.map((r: any) => r.id) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || 'Failed to get deleted sermon IDs' });
     }
   });
 
-  // DELETE /api/bible/sermons/:id - Delete sermon and remove its file
-  router.delete('/sermons/:id', (req: Request, res: Response) => {
+  // PUT /api/bible/sermons/:id - Update sermon metadata or upsert override
+  router.put('/sermons/:id', (req: Request, res: Response) => {
     try {
-      const existing = db.getSermonById(req.params.id);
-      if (!existing) return res.status(404).json({ error: 'Sermon not found' });
+      const sermonId = req.params.id;
+      const rawDb = (db as any).db;
+      // Ensure it's not marked as deleted if being edited/re-saved
+      rawDb.exec('CREATE TABLE IF NOT EXISTS deleted_sermons (id TEXT PRIMARY KEY, deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP)');
+      rawDb.prepare('DELETE FROM deleted_sermons WHERE id = ?').run(sermonId);
 
-      // Clean up file if it's on local disk
-      if (existing.mediaUrl && existing.mediaUrl.startsWith('/uploads/sermons/')) {
-        const filePath = path.join(process.cwd(), 'public', existing.mediaUrl);
-        if (fs.existsSync(filePath)) {
-          try {
-            fs.unlinkSync(filePath);
-          } catch (e) {
-            console.warn('Failed to delete file from disk:', e);
-          }
-        }
+      const existing = db.getSermonById(sermonId);
+      if (!existing) {
+        const now = new Date().toISOString();
+        rawDb.prepare(`
+          INSERT INTO sermons_podcasts (
+            id, title, speaker, series, scriptureRef, description, mediaType, mediaUrl, duration, dateRecorded, thumbnailUrl, channel, seriesPart, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          sermonId,
+          req.body.title || 'Untitled Message',
+          req.body.speaker || 'Pastor',
+          req.body.series || null,
+          req.body.scriptureRef || null,
+          req.body.description || req.body.summary || null,
+          req.body.mediaType || req.body.format || 'video',
+          req.body.mediaUrl || null,
+          req.body.duration ? (typeof req.body.duration === 'number' ? req.body.duration : parseInt(req.body.duration, 10) || null) : null,
+          req.body.dateRecorded || req.body.date || now.split('T')[0],
+          req.body.thumbnailUrl || null,
+          req.body.channel || null,
+          req.body.seriesPart ? parseInt(req.body.seriesPart, 10) : null,
+          now,
+          now
+        );
+        const created = db.getSermonById(sermonId);
+        return res.json(created);
       }
 
-      const success = db.deleteSermon(req.params.id);
-      res.json({ success });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete sermon' });
+      const updated = db.updateSermon(sermonId, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('[Update Sermon Error]:', error);
+      res.status(500).json({ error: error.message || 'Failed to update sermon' });
+    }
+  });
+
+  // DELETE /api/bible/sermons/:id - Delete sermon permanently and record tombstone
+  router.delete('/sermons/:id', (req: Request, res: Response) => {
+    try {
+      const sermonId = req.params.id;
+      const rawDb = (db as any).db;
+      rawDb.exec('CREATE TABLE IF NOT EXISTS deleted_sermons (id TEXT PRIMARY KEY, deletedAt DATETIME DEFAULT CURRENT_TIMESTAMP)');
+      rawDb.prepare('INSERT OR IGNORE INTO deleted_sermons (id) VALUES (?)').run(sermonId);
+
+      const existing = db.getSermonById(sermonId);
+      if (existing) {
+        // Clean up file if it's on local disk
+        if (existing.mediaUrl && existing.mediaUrl.startsWith('/uploads/sermons/')) {
+          const filePath = path.join(process.cwd(), 'public', existing.mediaUrl);
+          if (fs.existsSync(filePath)) {
+            try {
+              fs.unlinkSync(filePath);
+            } catch (e) {
+              console.warn('Failed to delete file from disk:', e);
+            }
+          }
+        }
+        db.deleteSermon(sermonId);
+      }
+
+      res.json({ success: true, deletedId: sermonId });
+    } catch (error: any) {
+      console.error('[Delete Sermon Error]:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete sermon' });
     }
   });
 

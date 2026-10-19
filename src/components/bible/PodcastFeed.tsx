@@ -21,10 +21,15 @@ import { X,
   Layers,
   ChevronRight,
   Share2,
-  RotateCcw
+  RotateCcw,
+  Edit2,
+  Trash2,
+  Plus,
+  AlertTriangle
 } from "lucide-react";
 import { getSermonCoverImage, getFallbackSpiritualCover } from "../../utils/sermonCovers";
 import { soundEffects } from "../../services/audio";
+import { SermonEditorModal } from "./SermonEditorModal";
 
 export interface SermonItem {
   id: string;
@@ -91,6 +96,63 @@ export function PodcastFeed({
   const [onlySunday, setOnlySunday] = useState<boolean>(false);
   const [onlyPowerhouse, setOnlyPowerhouse] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'alpha'>('recent');
+
+  // Sermon Edit, Add & Delete Management
+  const [editingSermon, setEditingSermon] = useState<SermonItem | null>(null);
+  const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
+  const [deletedSermonIds, setDeletedSermonIds] = useState<Set<string>>(new Set());
+  const [sermonToDelete, setSermonToDelete] = useState<SermonItem | null>(null);
+  const [showQuickDeleteConfirm, setShowQuickDeleteConfirm] = useState(false);
+  const [isDeletingDirect, setIsDeletingDirect] = useState(false);
+
+  const handleSaveSuccess = (saved: SermonItem) => {
+    setSermons((prev) => {
+      const exists = prev.some((s) => s.id === saved.id);
+      if (exists) {
+        return prev.map((s) => (s.id === saved.id ? { ...s, ...saved } : s));
+      }
+      return [saved, ...prev];
+    });
+    if (selectedVideo && selectedVideo.id === saved.id) {
+      setSelectedVideo(saved);
+    }
+    setSyncSuccessMsg(`Saved "${saved.title}" to library.`);
+    setTimeout(() => setSyncSuccessMsg(null), 4000);
+  };
+
+  const handleDeleteSuccess = (deletedId: string) => {
+    setSermons((prev) => prev.filter((s) => s.id !== deletedId));
+    setDeletedSermonIds((prev) => new Set([...prev, deletedId]));
+    if (selectedVideo && selectedVideo.id === deletedId) {
+      setSelectedVideo(null);
+      setIsPlayingModalVideo(false);
+    }
+    if (activeItem && activeItem.id === deletedId) {
+      setActiveItem(null);
+      setIsPlaying(false);
+    }
+    setSyncSuccessMsg('Sermon permanently removed from library.');
+    setTimeout(() => setSyncSuccessMsg(null), 4000);
+  };
+
+  const handleConfirmQuickDelete = async () => {
+    if (!sermonToDelete) return;
+    setIsDeletingDirect(true);
+    try {
+      const res = await fetch(`/api/bible/sermons/${encodeURIComponent(sermonToDelete.id)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        handleDeleteSuccess(sermonToDelete.id);
+      }
+    } catch (e) {
+      console.error('Failed to delete sermon:', e);
+    } finally {
+      setIsDeletingDirect(false);
+      setShowQuickDeleteConfirm(false);
+      setSermonToDelete(null);
+    }
+  };
 
   const [highlightedSermonId, setHighlightedSermonId] = useState<string | null>(() => {
     try {
@@ -258,11 +320,29 @@ export function PodcastFeed({
       }
     } catch {}
 
+    // Fetch deleted sermon IDs so suppressed entries never reappear
+    let deletedIdsSet = new Set<string>();
+    try {
+      const resDel = await fetch('/api/bible/sermons/deleted-ids');
+      if (resDel.ok) {
+        const dataDel = await resDel.json();
+        if (Array.isArray(dataDel.deletedIds)) {
+          deletedIdsSet = new Set(dataDel.deletedIds);
+          setDeletedSermonIds(deletedIdsSet);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch deleted IDs:", e);
+    }
+
     // Deduplicate all combined sermons by normalized ID / YouTube ID
     const seen = new Set<string>();
     const deduplicated: SermonItem[] = [];
     for (const item of combined) {
       const key = item.youtubeId ? `yt-${item.youtubeId}` : item.id;
+      if (deletedIdsSet.has(item.id) || (item.youtubeId && deletedIdsSet.has(`yt-${item.youtubeId}`))) {
+        continue;
+      }
       if (!seen.has(key)) {
         seen.add(key);
         deduplicated.push(item);
@@ -656,6 +736,19 @@ export function PodcastFeed({
                 <List className="w-4 h-4" />
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingSermon(null);
+                setIsEditorModalOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/25 transition-all active:scale-95 whitespace-nowrap cursor-pointer shrink-0"
+              title="Add a new sermon, message, or exposition to the library"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Add Sermon</span>
+            </button>
           </div>
         </div>
 
@@ -951,6 +1044,32 @@ export function PodcastFeed({
                   <Share2 className="w-3.5 h-3.5 text-amber-400" />
                   <span>Share Sermon</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSermon(spotlightSermon);
+                    setIsEditorModalOpen(true);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Edit Spotlight Sermon details"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Edit</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSermonToDelete(spotlightSermon);
+                    setShowQuickDeleteConfirm(true);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Delete Sermon from Library"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Delete</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1089,18 +1208,48 @@ export function PodcastFeed({
 
                       {/* Video Bottom Actions */}
                       <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-2 mt-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleShareSermon(sermon);
-                          }}
-                          className="text-xs font-semibold text-slate-300 hover:text-amber-300 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                          title="Share to Faith Feed"
-                        >
-                          <Share2 className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Share to Feed</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShareSermon(sermon);
+                            }}
+                            className="text-xs font-semibold text-slate-300 hover:text-amber-300 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                            title="Share to Faith Feed"
+                          >
+                            <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Share</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingSermon(sermon);
+                              setIsEditorModalOpen(true);
+                            }}
+                            className="text-xs font-semibold text-amber-300 hover:text-amber-200 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+                            title="Edit sermon title, speaker, series, or video links"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSermonToDelete(sermon);
+                              setShowQuickDeleteConfirm(true);
+                            }}
+                            className="text-xs font-semibold text-rose-300 hover:text-rose-200 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors"
+                            title="Delete sermon from library"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
 
                         <span className="text-xs font-bold text-amber-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                           <span>Watch</span>
@@ -1249,6 +1398,34 @@ export function PodcastFeed({
                       <Share2 className="w-3.5 h-3.5 text-amber-400" />
                       <span>Share</span>
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingSermon(sermon);
+                        setIsEditorModalOpen(true);
+                      }}
+                      className="text-xs font-semibold text-amber-300 hover:text-amber-200 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+                      title="Edit sermon title, speaker, series, or audio links"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSermonToDelete(sermon);
+                        setShowQuickDeleteConfirm(true);
+                      }}
+                      className="text-xs font-semibold text-rose-300 hover:text-rose-200 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors"
+                      title="Delete sermon from library"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Delete</span>
+                    </button>
                   </div>
 
                   <button
@@ -1324,13 +1501,39 @@ export function PodcastFeed({
                 <h2 className="text-white font-black text-sm sm:text-base leading-snug line-clamp-1">{selectedVideo.title}</h2>
                 <p className="text-xs text-amber-400 font-semibold">{selectedVideo.speaker} {selectedVideo.scriptureRef ? `• ${selectedVideo.scriptureRef}` : ""}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => { setSelectedVideo(null); setIsPlayingModalVideo(false); }}
-                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors flex-shrink-0"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSermon(selectedVideo);
+                    setIsEditorModalOpen(true);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all"
+                  title="Edit sermon title or details"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Edit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSermonToDelete(selectedVideo);
+                    setShowQuickDeleteConfirm(true);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1 transition-all"
+                  title="Delete sermon from library"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedVideo(null); setIsPlayingModalVideo(false); }}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Video Container */}
@@ -1458,6 +1661,62 @@ export function PodcastFeed({
                   </a>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SERMON EDITOR MODAL (ADD & EDIT) */}
+      <SermonEditorModal
+        isOpen={isEditorModalOpen}
+        onClose={() => {
+          setIsEditorModalOpen(false);
+          setEditingSermon(null);
+        }}
+        sermon={editingSermon}
+        onSaveSuccess={handleSaveSuccess}
+        onDeleteSuccess={handleDeleteSuccess}
+      />
+
+      {/* QUICK DELETE CONFIRMATION DIALOG */}
+      {showQuickDeleteConfirm && sermonToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-md bg-[#090b17] border border-rose-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">Delete Sermon from Library?</h3>
+                <p className="text-xs text-slate-400">Permanently removes this sermon from all feeds and channels.</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 space-y-1">
+              <p className="text-xs font-bold text-white line-clamp-2">"{sermonToDelete.title}"</p>
+              <p className="text-[11px] text-amber-400 font-semibold">{sermonToDelete.speaker} • {sermonToDelete.channel || 'Sanctuary Archive'}</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuickDeleteConfirm(false);
+                  setSermonToDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmQuickDelete}
+                disabled={isDeletingDirect}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white transition-all shadow-lg shadow-rose-600/30 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingDirect ? 'Deleting...' : 'Yes, Delete Sermon'}</span>
+              </button>
             </div>
           </div>
         </div>
