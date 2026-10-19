@@ -26,6 +26,28 @@ export interface RadioStreamConfig {
 
 export const RADIO_STREAMS: RadioStreamConfig[] = [
   {
+    id: 'refnet_live',
+    display_name: 'Renewing Your Mind (RefNet 24/7)',
+    short_name: 'Renewing Your Mind',
+    genre: 'Reformed Preaching & Theology',
+    primary_content: [
+      'Renewing Your Mind Daily Broadcast',
+      'Dr. R.C. Sproul Expository Teaching',
+      'Ligonier Ministries Preaching & Hymns',
+    ],
+    stream_url: 'https://icecast.refnet.fm/utc/-0500',
+    fallback_stream_url: 'https://ais-sa3.cdnstream1.com/2632_128.mp3',
+    badge: 'RENEWING YOUR MIND',
+    badge_color: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    accent_gradient: 'from-amber-600 via-yellow-600 to-amber-700',
+    default_meta: {
+      author: 'Dr. R.C. Sproul & Ligonier',
+      title: 'Renewing Your Mind Live Broadcast',
+      ministry: 'Ligonier Ministries',
+      sermon_series: 'Expository Preaching & Christian Worldview',
+    },
+  },
+  {
     id: 'family_radio_live',
     display_name: 'Family Radio',
     short_name: 'Family Radio',
@@ -36,7 +58,7 @@ export const RADIO_STREAMS: RadioStreamConfig[] = [
       'Scripture Readings',
     ],
     stream_url: 'https://ais-sa3.cdnstream1.com/2632_128.mp3',
-    fallback_stream_url: 'https://live.mystreamplayer.com/wfme',
+    fallback_stream_url: 'https://icecast.refnet.fm/utc/-0500',
     badge: 'TEACHING & HYMNS',
     badge_color: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
     accent_gradient: 'from-amber-600 via-yellow-600 to-amber-700',
@@ -278,7 +300,7 @@ router.get('/stations', (_req: Request, res: Response) => {
  * Returns isolated metadata for requested station
  */
 router.get('/now-playing', (req: Request, res: Response) => {
-  const stationId = ((req.query.station as string) || 'family_radio_live').toLowerCase();
+  const stationId = ((req.query.station as string) || 'refnet_live').toLowerCase();
   const station = RADIO_STREAMS.find((s) => s.id === stationId) || RADIO_STREAMS[0];
   const cached = stationMetadataCache[station.id];
 
@@ -312,10 +334,10 @@ router.get('/now-playing', (req: Request, res: Response) => {
  * Strips out ICY metadata bytes to deliver pure, uninterrupted audio to <audio>.
  */
 router.get('/stream/:stationId', (req: Request, res: Response) => {
-  const stationId = (req.params.stationId || 'family_radio_live').toLowerCase();
+  const stationId = (req.params.stationId || 'refnet_live').toLowerCase();
   const station = RADIO_STREAMS.find((s) => s.id === stationId) || RADIO_STREAMS[0];
 
-  function openStream(targetUrl: string, redirectLimit = 5) {
+  function openStream(targetUrl: string, redirectLimit = 5, hasAttemptedFallback = false) {
     if (redirectLimit <= 0) {
       if (!res.headersSent) res.status(502).send('Too many stream redirects');
       return;
@@ -324,14 +346,14 @@ router.get('/stream/:stationId', (req: Request, res: Response) => {
     const client = targetUrl.startsWith('https') ? https : http;
     const reqOptions: http.RequestOptions = {
       headers: {
-        'User-Agent': 'Aura-Sanctuary-Radio/2.0 (Mozilla/5.0 compatible)',
+        'User-Agent': 'Aura-Sanctuary-Radio/2.0 (Mozilla/5.0 compatible; Windows NT 10.0; Win64; x64)',
         Accept: '*/*',
         'Icy-MetaData': '1',
       },
     };
 
     const streamReq = client.get(targetUrl, reqOptions, (streamRes) => {
-      // Follow redirects
+      // Follow redirects internally without redirecting the browser
       if (
         streamRes.statusCode &&
         streamRes.statusCode >= 300 &&
@@ -343,12 +365,16 @@ router.get('/stream/:stationId', (req: Request, res: Response) => {
           const u = new URL(targetUrl);
           nextUrl = `${u.protocol}//${u.host}${nextUrl}`;
         }
-        return openStream(nextUrl, redirectLimit - 1);
+        return openStream(nextUrl, redirectLimit - 1, hasAttemptedFallback);
       }
 
       if (streamRes.statusCode && streamRes.statusCode >= 400) {
+        if (!hasAttemptedFallback && station.fallback_stream_url) {
+          console.warn(`[Radio Proxy] Stream returned ${streamRes.statusCode}, trying fallback for ${station.id}`);
+          return openStream(station.fallback_stream_url, 3, true);
+        }
         if (!res.headersSent) {
-          res.redirect(station.stream_url);
+          res.status(502).send('Audio stream currently unavailable');
         }
         return;
       }
@@ -379,8 +405,11 @@ router.get('/stream/:stationId', (req: Request, res: Response) => {
 
     streamReq.on('error', (err) => {
       console.warn(`[Radio Proxy] Error connecting to ${station.id}:`, err.message);
+      if (!hasAttemptedFallback && station.fallback_stream_url) {
+        return openStream(station.fallback_stream_url, 3, true);
+      }
       if (!res.headersSent) {
-        res.redirect(station.stream_url);
+        res.status(502).send('Audio connection failed');
       }
     });
   }

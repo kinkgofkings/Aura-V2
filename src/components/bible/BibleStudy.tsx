@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   BookOpen, 
   LayoutGrid, 
@@ -98,6 +98,9 @@ export function BibleStudy() {
   const newTestamentBooks = getBooksByTestament("New Testament");
   const currentBooks = selectedTestament === "Old Testament" ? oldTestamentBooks : newTestamentBooks;
 
+  const coursesRef = useRef<Course[]>([]);
+  coursesRef.current = courses;
+
   useEffect(() => {
     fetchCourses();
 
@@ -140,7 +143,8 @@ export function BibleStudy() {
         const courseSearch = (customEvent.detail?.courseId || "").toLowerCase();
         if (courseSearch) {
           setTimeout(() => {
-            const foundCourse = courses.find(
+            const currentList = coursesRef.current;
+            const foundCourse = currentList.find(
               c => c.id.toLowerCase().includes(courseSearch) || c.title.toLowerCase().includes(courseSearch)
             );
             if (foundCourse) {
@@ -207,7 +211,7 @@ export function BibleStudy() {
       window.removeEventListener("switch_study_tab", handleSwitchStudyTab);
       window.removeEventListener("navigate_tab", handleGlobalNav);
     };
-  }, [courses]);
+  }, []);
 
   const fetchCourses = async () => {
     setLoadingCourses(true);

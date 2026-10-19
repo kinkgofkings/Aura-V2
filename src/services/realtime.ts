@@ -50,6 +50,11 @@ class RealtimeClient {
 
   private open() {
     if (this.stopped || !this.userId || typeof window === "undefined") return;
+    // If the host does not support WebSockets (e.g. reverse proxy without WS upgrade), gracefully stop
+    if (this.retry >= 2) {
+      return;
+    }
+
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -93,20 +98,17 @@ class RealtimeClient {
       ws.onclose = () => {
         if (this.ws === ws) this.ws = null;
         if (this.stopped) return;
-        // Exponential backoff capped at 15 seconds, max 30 retries before resting
-        const delay = Math.min(15000, 1000 * 1.5 ** Math.min(this.retry, 8));
         this.retry += 1;
-        this.reconnectTimer = setTimeout(() => this.open(), delay);
+        if (this.retry < 2) {
+          this.reconnectTimer = setTimeout(() => this.open(), 3000);
+        }
       };
 
       ws.onerror = () => {
-        // Will trigger onclose naturally, do not force redundant close()
+        // Will trigger onclose naturally
       };
-    } catch (err) {
-      console.warn("[Realtime] WebSocket creation notice:", err);
-      if (!this.stopped) {
-        this.reconnectTimer = setTimeout(() => this.open(), 5000);
-      }
+    } catch {
+      this.retry += 1;
     }
   }
 }

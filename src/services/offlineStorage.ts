@@ -72,36 +72,61 @@ class OfflineStorageService {
     };
   }
 
+  private memoryFallback: Map<string, string> = new Map();
+  private hasReportedQuotaError = false;
+
   // Local storage caching methods
   public save<T>(key: string, data: T): void {
+    if (typeof window === 'undefined') return;
     try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(data));
-      }
+      localStorage.setItem(key, JSON.stringify(data));
+      this.hasReportedQuotaError = false;
     } catch (e: any) {
-      console.warn(`Error saving key ${key}:`, e);
-      if (typeof window !== 'undefined') {
+      // Handle QuotaExceededError safely
+      const isQuota = e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014;
+      if (isQuota) {
         try {
+          // 1. Evict non-essential disposable cache keys
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && (k.startsWith('aura_bible_cache_') || k.startsWith('aura_cached_stories') || k.startsWith('aura_group_posts_'))) {
+              keysToRemove.push(k);
+            }
+          }
+          keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+          // 2. If saving an array (like posts), strip heavy fields and keep only latest 10 items
           if (Array.isArray(data)) {
-            // Strip any raw large base64 strings before caching to stay well within browser quota
-            const sanitized = (data as any[]).slice(0, 30).map((item) => {
+            const sanitized = (data as any[]).slice(0, 15).map((item) => {
               if (item && typeof item === 'object') {
                 const copy = { ...item };
                 if (Array.isArray(copy.mediaUrls)) {
                   copy.mediaUrls = copy.mediaUrls.map((m: any) =>
-                    typeof m === 'string' && m.length > 500 && m.startsWith('data:') ? 'cached_media_pending' : m
+                    typeof m === 'string' && m.length > 300 ? 'cached_media_light' : m
                   );
                 }
-                if (typeof copy.authorAvatar === 'string' && copy.authorAvatar.length > 500 && copy.authorAvatar.startsWith('data:')) {
-                  copy.authorAvatar = 'https://api.dicebear.com/7.x/bottts/svg?seed=lightsouttattootex@gmail.com';
+                if (typeof copy.authorAvatar === 'string' && copy.authorAvatar.length > 300) {
+                  copy.authorAvatar = '';
                 }
                 return copy;
               }
               return item;
             });
             localStorage.setItem(key, JSON.stringify(sanitized));
+            return;
           }
-        } catch {}
+        } catch {
+          // If still failing, store in in-memory fallback to keep the app working 100% seamlessly
+          this.memoryFallback.set(key, JSON.stringify(data));
+        }
+      } else {
+        this.memoryFallback.set(key, JSON.stringify(data));
+      }
+
+      if (!this.hasReportedQuotaError) {
+        console.warn(`[Storage] Storage quota reached, switched to smart compact cache for ${key}`);
+        this.hasReportedQuotaError = true;
       }
     }
   }
@@ -109,7 +134,7 @@ class OfflineStorageService {
   public load<T>(key: string, fallback: T): T {
     try {
       if (typeof window !== 'undefined') {
-        const item = localStorage.getItem(key);
+        const item = localStorage.getItem(key) || this.memoryFallback.get(key);
         if (item) {
           return JSON.parse(item);
         }

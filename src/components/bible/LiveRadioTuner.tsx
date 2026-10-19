@@ -17,7 +17,7 @@ import {
 import { soundEffects } from '../../services/audio';
 
 export interface RadioStation {
-  id: 'family_radio_live' | 'bott_radio_live' | 'bbn_live' | 'afr_talk_live' | 'air1';
+  id: 'refnet_live' | 'family_radio_live' | 'bott_radio_live' | 'bbn_live' | 'afr_talk_live' | 'air1';
   name: string;
   shortName: string;
   tagline: string;
@@ -36,18 +36,35 @@ export interface RadioStation {
 
 export const STATIONS: RadioStation[] = [
   {
+    id: 'refnet_live',
+    name: 'Renewing Your Mind (RefNet)',
+    shortName: 'Renewing Your Mind',
+    tagline: '24/7 Biblical Preaching & Teaching from Dr. R.C. Sproul & Ligonier',
+    streamUrl: '/api/radio/stream/refnet_live',
+    directStreamUrl: 'https://icecast.refnet.fm/utc/-0500',
+    fallbackStreamUrl: 'https://ais-sa3.cdnstream1.com/2632_128.mp3',
+    genre: 'Reformed Preaching & Theology',
+    badge: 'RENEWING YOUR MIND',
+    badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    accentGradient: 'from-amber-600 via-yellow-600 to-amber-700',
+    primaryContent: ['Renewing Your Mind Daily Broadcast', 'Dr. R.C. Sproul Expository Teaching', 'Sacred Hymns'],
+    defaultSpeaker: 'Dr. R.C. Sproul & Teaching Fellows',
+    defaultTitle: 'Renewing Your Mind Live 24/7',
+    ministry: 'Ligonier Ministries'
+  },
+  {
     id: 'family_radio_live',
     name: 'Family Radio',
     shortName: 'Family Radio',
     tagline: 'Traditional Preaching, Hymns & Daily Renewing Your Mind',
     streamUrl: '/api/radio/stream/family_radio_live',
     directStreamUrl: 'https://ais-sa3.cdnstream1.com/2632_128.mp3',
-    fallbackStreamUrl: 'https://live.mystreamplayer.com/wfme',
+    fallbackStreamUrl: 'https://icecast.refnet.fm/utc/-0500',
     genre: 'Traditional Preaching & Hymns',
     badge: 'FAMILY RADIO',
     badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
     accentGradient: 'from-amber-600 via-yellow-600 to-amber-700',
-    primaryContent: ['Expository Preaching', 'Daily Renewing Your Mind Broadcast', 'Scripture Readings'],
+    primaryContent: ['Expository Preaching', 'Sacred Hymns', 'Scripture Readings'],
     defaultSpeaker: 'Various Ministries / Dr. R.C. Sproul',
     defaultTitle: 'Family Radio Live Preaching',
     ministry: 'Family Radio Network'
@@ -159,7 +176,7 @@ export const LiveRadioTuner: React.FC<LiveRadioTunerProps> = ({
       const saved = localStorage.getItem('aura_active_radio_station') as RadioStation['id'];
       if (saved && STATIONS.some((s) => s.id === saved)) return saved;
     } catch {}
-    return 'family_radio_live';
+    return 'refnet_live';
   });
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);

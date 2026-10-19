@@ -384,9 +384,21 @@ export const SermonDriftCard: React.FC<{ index?: number }> = ({ index = 0 }) => 
     fetchRecentSermon();
   }, [index]);
 
-  const handleShareToFeed = (e: React.MouseEvent) => {
+  const handleShareToFeed = async (e: React.MouseEvent) => {
     e.stopPropagation();
     soundEffects.playTap();
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: `Sermon: ${sermon.title}`,
+          text: `Listen to "${sermon.title}" by ${sermon.speaker || 'Pastor'} on Aura Sanctuary:`,
+          url: window.location.origin,
+        });
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+      }
+    }
     window.dispatchEvent(
       new CustomEvent('open_create_post', {
         detail: {

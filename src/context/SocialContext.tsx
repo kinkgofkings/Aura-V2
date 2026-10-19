@@ -116,7 +116,6 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           });
 
-          offlineStorage.save(STORAGE_KEYS.POSTS, merged);
           return merged;
         });
       }
@@ -163,7 +162,6 @@ export const SocialProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const combined = Array.from(serverMap.values()).filter(
             (s) => now - s.createdAt < STORY_CUTOFF
           );
-          offlineStorage.save(STORAGE_KEYS.STORIES, combined);
           return combined;
         });
       }
