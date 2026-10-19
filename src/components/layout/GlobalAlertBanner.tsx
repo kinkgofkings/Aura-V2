@@ -17,16 +17,29 @@ export const GlobalAlertBanner: React.FC = () => {
   const [recentSermons, setRecentSermons] = useState<SermonAlertItem[]>([]);
   const [spotlightSermon, setSpotlightSermon] = useState<SermonAlertItem | null>(null);
 
-  const navigateTo = (tab: string, subtab?: string, sermonId?: string) => {
-    if (sermonId) {
-      try {
+  const navigateTo = (tab: string, subtab?: string, sermonId?: string, courseId?: string) => {
+    try {
+      if (sermonId) {
         localStorage.setItem('aura_study_initial_tab', 'pulpit');
         localStorage.setItem('aura_target_sermon_id', sermonId);
         sessionStorage.setItem('aura_target_sermon_id', sermonId);
-      } catch {}
+      } else if (subtab) {
+        localStorage.setItem('aura_study_initial_tab', subtab);
+      }
+    } catch {}
+
+    if (sermonId) {
       window.dispatchEvent(new CustomEvent('open_sermon', { detail: { sermonId } }));
     }
-    window.dispatchEvent(new CustomEvent('navigate_tab', { detail: { tab, subtab, sermonId } }));
+
+    // Direct event dispatch to both navigate_tab AND switch_study_tab / switch_recovery_tab
+    window.dispatchEvent(new CustomEvent('navigate_tab', { detail: { tab, subtab, sermonId, courseId } }));
+    if (tab === 'bible' && subtab) {
+      window.dispatchEvent(new CustomEvent('switch_study_tab', { detail: { tab: subtab, sermonId, courseId } }));
+      window.dispatchEvent(new CustomEvent('aura_switch_study_tab', { detail: { tab: subtab, sermonId, courseId } }));
+    } else if (tab === 'recovery' && subtab) {
+      window.dispatchEvent(new CustomEvent('switch_recovery_tab', { detail: { tab: subtab } }));
+    }
   };
 
   const loadSermonData = async () => {

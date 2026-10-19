@@ -634,32 +634,32 @@ export function PodcastFeed({
             Stream verified historical expositions, modern pulpit teachings, and community sermons across audio and video.
           </p>
 
-          {/* DYNAMIC HERO SEGMENTED SWITCHER */}
-          <div className="pt-3">
-            <div className="inline-flex p-1.5 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/15 shadow-2xl gap-1">
+          {/* DYNAMIC HERO SEGMENTED SWITCHER - FITS RESPONSIVELY WITH ZERO BLEED */}
+          <div className="pt-2 sm:pt-3 w-full max-w-xl mx-auto px-1 sm:px-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 w-full p-1 sm:p-1.5 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/15 shadow-2xl gap-1.5">
               <button
                 type="button"
                 onClick={() => setFormatFilter("all")}
-                className={"flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all " + (formatFilter === "all" ? "bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-lg shadow-amber-500/30 scale-[1.02]" : "text-slate-400 hover:text-white")}
+                className={"flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer " + (formatFilter === "all" ? "bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-lg shadow-amber-500/30 scale-[1.02]" : "text-slate-400 hover:text-white hover:bg-white/5")}
               >
-                <Layers className="w-4 h-4" />
-                <span>All Formats</span>
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">All Formats</span>
               </button>
               <button
                 type="button"
                 onClick={() => setFormatFilter("audio")}
-                className={"flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all " + (formatFilter === "audio" ? "bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-lg shadow-amber-500/30 scale-[1.02]" : "text-slate-400 hover:text-white")}
+                className={"flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer " + (formatFilter === "audio" ? "bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-lg shadow-amber-500/30 scale-[1.02]" : "text-slate-400 hover:text-white hover:bg-white/5")}
               >
-                <Headphones className="w-4 h-4" />
-                <span>Audio Sermons</span>
+                <Headphones className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Audio</span>
               </button>
               <button
                 type="button"
                 onClick={() => setFormatFilter("video")}
-                className={"flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all " + (formatFilter === "video" ? "bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-lg shadow-amber-500/30 scale-[1.02]" : "text-slate-400 hover:text-white")}
+                className={"flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer " + (formatFilter === "video" ? "bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-lg shadow-amber-500/30 scale-[1.02]" : "text-slate-400 hover:text-white hover:bg-white/5")}
               >
-                <Video className="w-4 h-4" />
-                <span>Video Sermons</span>
+                <Video className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Video</span>
               </button>
 
               <button
@@ -667,11 +667,11 @@ export function PodcastFeed({
                 onClick={() => {
                   window.dispatchEvent(new CustomEvent('open_live_radio_tuner'));
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 shadow-md shadow-amber-500/10"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-black transition-all text-amber-300 hover:text-white bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 shadow-md shadow-amber-500/10 cursor-pointer"
                 title="Launch Live 24/7 Christian Internet Radio"
               >
-                <Radio className="w-4 h-4 text-amber-400 animate-pulse" />
-                <span>Live 24/7 Tuner</span>
+                <Radio className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
+                <span className="truncate">Live 24/7</span>
               </button>
             </div>
           </div>

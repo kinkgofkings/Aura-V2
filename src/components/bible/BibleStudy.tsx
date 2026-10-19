@@ -68,11 +68,10 @@ export function BibleStudy() {
   const [activeTab, setActiveTab] = useState<"reader" | "pulpit" | "study" | "courses" | "prayers">(() => {
     try {
       const saved = localStorage.getItem("aura_study_initial_tab");
-      if (saved === "prayer" || saved === "prayers") {
-        localStorage.removeItem("aura_study_initial_tab");
-        return "prayers";
-      }
+      if (saved === "prayer" || saved === "prayers") return "prayers";
       if (saved === "podcasts" || saved === "pulpit") return "pulpit";
+      if (saved === "courses") return "courses";
+      if (saved === "study") return "study";
       if (saved === "reader" || saved === "bible") return "reader";
     } catch {}
     return "reader";
@@ -115,6 +114,7 @@ export function BibleStudy() {
         prayer?: any;
         sermonId?: string;
         sermon?: any;
+        courseId?: string;
       }>;
       const target = customEvent.detail?.tab;
       if (target === "prayer" || target === "prayers") {
@@ -137,6 +137,23 @@ export function BibleStudy() {
         }
       } else if (target === "courses") {
         setActiveTab("courses");
+        const courseSearch = (customEvent.detail?.courseId || "").toLowerCase();
+        if (courseSearch) {
+          setTimeout(() => {
+            const foundCourse = courses.find(
+              c => c.id.toLowerCase().includes(courseSearch) || c.title.toLowerCase().includes(courseSearch)
+            );
+            if (foundCourse) {
+              setSelectedCourseObj(foundCourse);
+              setCourseViewLevel("course");
+              fetchLessons(foundCourse.id);
+            } else {
+              setCourseViewLevel("catalog");
+            }
+          }, 80);
+        } else {
+          setCourseViewLevel("catalog");
+        }
       } else if (target === "study") {
         setActiveTab("study");
         if (customEvent.detail?.reference) {
@@ -174,14 +191,23 @@ export function BibleStudy() {
       }
     };
 
+    const handleGlobalNav = (e: Event) => {
+      const custom = e as CustomEvent<{ tab?: string; subtab?: string; courseId?: string; sermonId?: string }>;
+      if (custom.detail?.tab === 'bible' && custom.detail.subtab) {
+        handleSwitchStudyTab(new CustomEvent('switch_study_tab', { detail: { tab: custom.detail.subtab, ...custom.detail } }));
+      }
+    };
+
     window.addEventListener("aura_switch_study_tab", handleSwitchStudyTab);
     window.addEventListener("switch_study_tab", handleSwitchStudyTab);
+    window.addEventListener("navigate_tab", handleGlobalNav);
     return () => {
       window.removeEventListener('aura_courses_updated', handleCoursesUpdated);
       window.removeEventListener("aura_switch_study_tab", handleSwitchStudyTab);
       window.removeEventListener("switch_study_tab", handleSwitchStudyTab);
+      window.removeEventListener("navigate_tab", handleGlobalNav);
     };
-  }, []);
+  }, [courses]);
 
   const fetchCourses = async () => {
     setLoadingCourses(true);
