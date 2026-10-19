@@ -23,7 +23,8 @@ import {
   UploadCloud,
   Crown,
   DollarSign,
-  Globe
+  Globe,
+  Radio
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
@@ -267,6 +268,22 @@ export const SuperAdminDrawer: React.FC<SuperAdminDrawerProps> = ({
             >
               <Mic className="w-4 h-4 text-orange-400" />
               <span>Pulpit & Sermons</span>
+            </button>
+
+            {/* Live 24/7 Radio Tuner (RefNet) */}
+            <button
+              onClick={() => handleAction(() => {
+                window.dispatchEvent(new CustomEvent('open_live_radio_tuner'));
+              })}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-all text-xs font-semibold"
+            >
+              <div className="flex items-center gap-2.5">
+                <Radio className="w-4 h-4 text-amber-400" />
+                <span>Live 24/7 Radio (RefNet)</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase tracking-wider">
+                LIVE
+              </span>
             </button>
 
             {/* Dedicated Study Engine */}

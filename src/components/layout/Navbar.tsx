@@ -7,6 +7,7 @@ import {
   Bell,
   LogIn,
   Users,
+  Radio,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
@@ -198,6 +199,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Action Suite: Cleaned Up */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Live 24/7 Radio Tuner Quick Trigger */}
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('open_live_radio_tuner'));
+            }}
+            className="px-2.5 sm:px-3 py-1.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-yellow-500/15 to-orange-500/15 hover:from-amber-500/25 hover:to-orange-500/25 border border-amber-500/35 text-amber-300 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/10 transition-all active:scale-95"
+            title="Tune into 24/7 Live Radio (Renewing Your Mind / RefNet)"
+          >
+            <Radio className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span className="hidden sm:inline">Live Radio</span>
+            <span className="sm:hidden">Radio</span>
+          </button>
+
           {/* Aura Energy & Live Wallpaper Pill */}
           <AuraEnergyQuickPill />
 

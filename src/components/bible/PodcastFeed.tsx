@@ -30,6 +30,7 @@ import { X,
 import { getSermonCoverImage, getFallbackSpiritualCover } from "../../utils/sermonCovers";
 import { soundEffects } from "../../services/audio";
 import { SermonEditorModal } from "./SermonEditorModal";
+import { LiveRadioTuner } from "./LiveRadioTuner";
 
 export interface SermonItem {
   id: string;
@@ -660,10 +661,25 @@ export function PodcastFeed({
                 <Video className="w-4 h-4" />
                 <span>Video Sermons</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('open_live_radio_tuner'));
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 shadow-md shadow-amber-500/10"
+                title="Launch Live 24/7 Christian Internet Radio"
+              >
+                <Radio className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span>Live 24/7 Tuner</span>
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* 24/7 LIVE RADIO TUNER (RENEWING YOUR MIND / REFNET) */}
+      <LiveRadioTuner variant="banner" />
 
       {/* FILTER, SEARCH & VIEW MODE BAR */}
       <div className="space-y-2.5">

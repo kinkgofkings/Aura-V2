@@ -41,6 +41,7 @@ import { UnverifiedBanner } from './components/auth/UnverifiedBanner';
 import { InAppBrowser } from './components/common/InAppBrowser';
 import { GivingModal } from './components/giving/GivingModal';
 import { PromoteLeadersModal } from './components/admin/PromoteLeadersModal';
+import { LiveRadioTuner } from './components/bible/LiveRadioTuner';
 
 function MainApp() {
   useDevotionalNotifications();
@@ -85,6 +86,7 @@ function MainApp() {
   const [showGospelTract, setShowGospelTract] = useState(false);
   const [isGivingModalOpen, setIsGivingModalOpen] = useState(false);
   const [isPromoteLeadersOpen, setIsPromoteLeadersOpen] = useState(false);
+  const [isRadioTunerOpen, setIsRadioTunerOpen] = useState(false);
 
   React.useEffect(() => {
     if (!showSplashScreen) {
@@ -168,6 +170,7 @@ function MainApp() {
 
     const handleOpenGiving = () => setIsGivingModalOpen(true);
     const handleOpenPromoteLeaders = () => setIsPromoteLeadersOpen(true);
+    const handleOpenRadio = () => setIsRadioTunerOpen(true);
 
     window.addEventListener('navigate_tab', handleTabNav);
     window.addEventListener('open_share_modal', handleOpenShare);
@@ -175,6 +178,7 @@ function MainApp() {
     window.addEventListener('open_splash_screen', handleOpenSplash);
     window.addEventListener('open_giving_modal', handleOpenGiving);
     window.addEventListener('open_promote_leaders_modal', handleOpenPromoteLeaders);
+    window.addEventListener('open_live_radio_tuner', handleOpenRadio);
     return () => {
       window.removeEventListener('navigate_tab', handleTabNav);
       window.removeEventListener('open_share_modal', handleOpenShare);
@@ -182,6 +186,7 @@ function MainApp() {
       window.removeEventListener('open_splash_screen', handleOpenSplash);
       window.removeEventListener('open_giving_modal', handleOpenGiving);
       window.removeEventListener('open_promote_leaders_modal', handleOpenPromoteLeaders);
+      window.removeEventListener('open_live_radio_tuner', handleOpenRadio);
     };
   }, []);
 
@@ -342,6 +347,13 @@ function MainApp() {
       <PromoteLeadersModal
         isOpen={isPromoteLeadersOpen}
         onClose={() => setIsPromoteLeadersOpen(false)}
+      />
+
+      {/* 24/7 Live Radio Tuner Modal (RefNet / Renewing Your Mind) */}
+      <LiveRadioTuner
+        variant="modal"
+        isOpen={isRadioTunerOpen}
+        onClose={() => setIsRadioTunerOpen(false)}
       />
     </div>
   );
