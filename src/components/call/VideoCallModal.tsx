@@ -65,12 +65,14 @@ export const VideoCallModal: React.FC = () => {
     getVideoDevices,
     simulateCompanionAnswer,
     endCall,
+    reconnectCall,
+    connectionQuality,
     peerReachable,
   } = useCall();
 
   // View state controls
-  
   const [activeCard, setActiveCard] = useState<string>(CALLING_CARDS[0]);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   useEffect(() => {
     if (activeCall?.roomId || activeCall?.id) {
@@ -111,20 +113,22 @@ export const VideoCallModal: React.FC = () => {
   }, [getVideoDevices]);
 
   // Handle stream attachments whenever streams or layout modes change
+  // Strictly route all remote speech through remoteAudioRef to prevent duplicate audio & echo
   useEffect(() => {
-    // 1. Remote Audio stream (handles speech playback)
+    // 1. Dedicated Remote Audio element (handles crystal-clear speech playback)
     if (remoteAudioRef.current && remoteStream) {
       remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
+      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.45;
       remoteAudioRef.current.play().catch(() => {});
     }
 
     // 2. Spotlight Mode Streams:
-    // Main Stage: Remote Stream (or Local Stream if user explicitly swapped views)
+    // Video elements must remain muted to prevent echo / audio feedback
     const mainStream = isViewSwapped ? localStream : remoteStream;
     if (mainStageVideoRef.current && mainStream) {
       mainStageVideoRef.current.srcObject = mainStream;
-      mainStageVideoRef.current.volume = isViewSwapped ? 0 : isSpeakerOn ? 1.0 : 0.4;
+      mainStageVideoRef.current.volume = 0;
+      mainStageVideoRef.current.muted = true;
       mainStageVideoRef.current.play().catch(() => {});
     }
 
@@ -132,29 +136,36 @@ export const VideoCallModal: React.FC = () => {
     const selfStream = isViewSwapped ? remoteStream : localStream;
     if (selfTileVideoRef.current && selfStream) {
       selfTileVideoRef.current.srcObject = selfStream;
-      selfTileVideoRef.current.volume = isViewSwapped && isSpeakerOn ? 1.0 : 0;
+      selfTileVideoRef.current.volume = 0;
+      selfTileVideoRef.current.muted = true;
       selfTileVideoRef.current.play().catch(() => {});
     }
 
     // 3. Grid Mode Streams:
     if (gridRemoteVideoRef.current && remoteStream) {
       gridRemoteVideoRef.current.srcObject = remoteStream;
-      gridRemoteVideoRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
+      gridRemoteVideoRef.current.volume = 0;
+      gridRemoteVideoRef.current.muted = true;
       gridRemoteVideoRef.current.play().catch(() => {});
     }
     if (gridLocalVideoRef.current && localStream) {
       gridLocalVideoRef.current.srcObject = localStream;
       gridLocalVideoRef.current.volume = 0;
+      gridLocalVideoRef.current.muted = true;
       gridLocalVideoRef.current.play().catch(() => {});
     }
 
     // 4. Picture-in-Picture streams
     if (pipRemoteVideoRef.current && remoteStream) {
       pipRemoteVideoRef.current.srcObject = remoteStream;
+      pipRemoteVideoRef.current.volume = 0;
+      pipRemoteVideoRef.current.muted = true;
       pipRemoteVideoRef.current.play().catch(() => {});
     }
     if (pipLocalVideoRef.current && localStream) {
       pipLocalVideoRef.current.srcObject = localStream;
+      pipLocalVideoRef.current.volume = 0;
+      pipLocalVideoRef.current.muted = true;
       pipLocalVideoRef.current.play().catch(() => {});
     }
   }, [
@@ -205,6 +216,7 @@ export const VideoCallModal: React.FC = () => {
               ref={pipRemoteVideoRef}
               autoPlay
               playsInline
+              muted={true}
               className="w-full h-full object-cover object-center"
             />
           ) : (
@@ -222,7 +234,7 @@ export const VideoCallModal: React.FC = () => {
               ref={pipLocalVideoRef}
               autoPlay
               playsInline
-              muted
+              muted={true}
               className="w-full h-full object-cover object-center scale-x-[-1]"
             />
           </div>
@@ -300,11 +312,21 @@ export const VideoCallModal: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 flex items-center gap-2">
-                <span className="flex items-center gap-1 text-emerald-400 font-medium">
-                  <Radio className="w-3 h-3 animate-pulse text-emerald-400" />
-                  {isConnected ? 'Connected' : 'Ringing (Super Mario)...'}
+                <span className={`flex items-center gap-1 font-medium ${
+                  connectionQuality === 'reconnecting'
+                    ? 'text-amber-400 animate-pulse'
+                    : isConnected
+                    ? 'text-emerald-400'
+                    : 'text-amber-300'
+                }`}>
+                  <Radio className={`w-3 h-3 ${connectionQuality === 'reconnecting' ? 'animate-spin text-amber-400' : 'animate-pulse text-emerald-400'}`} />
+                  {connectionQuality === 'reconnecting'
+                    ? 'Cellular Reconnecting...'
+                    : isConnected
+                    ? 'Connected (Clear HD)'
+                    : 'Ringing (Super Mario)...'}
                 </span>
-                • <span>{activeCall.isVideo ? '1080p HD' : 'Spatial Audio'}</span>
+                • <span>{activeCall.isVideo ? '720p HD Mobile' : 'Opus HD Voice'}</span>
                 • <span className="text-slate-300">{isSpeakerOn ? '🔊 Speaker' : '🔈 Earpiece'}</span>
               </p>
             </div>
@@ -369,7 +391,7 @@ export const VideoCallModal: React.FC = () => {
                   ref={mainStageVideoRef}
                   autoPlay
                   playsInline
-                  muted={isViewSwapped}
+                  muted={true}
                   className={`w-full h-full ${
                     videoFitMode === 'cover' ? 'object-cover' : 'object-contain bg-black'
                   } object-center transition-all`}
@@ -574,6 +596,7 @@ export const VideoCallModal: React.FC = () => {
                     ref={gridRemoteVideoRef}
                     autoPlay
                     playsInline
+                    muted={true}
                     className="w-full h-full object-cover object-center"
                   />
                 ) : (
@@ -692,6 +715,26 @@ export const VideoCallModal: React.FC = () => {
           >
             {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
           </button>
+
+          {/* Reconnect / Refresh Connection on Mobile Road Travel */}
+          {isConnected && (
+            <button
+              id="reconnect-call-btn"
+              onClick={async () => {
+                setIsReconnecting(true);
+                await reconnectCall();
+                setTimeout(() => setIsReconnecting(false), 2000);
+              }}
+              className={`p-3.5 sm:p-4 rounded-2xl flex items-center justify-center transition-all ${
+                connectionQuality === 'reconnecting' || connectionQuality === 'failed'
+                  ? 'bg-amber-500 text-black animate-pulse shadow-lg ring-2 ring-amber-300'
+                  : 'bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white'
+              }`}
+              title="Refresh / Reconnect Media Connection"
+            >
+              <RefreshCw className={`w-5 h-5 ${isReconnecting || connectionQuality === 'reconnecting' ? 'animate-spin text-amber-400' : ''}`} />
+            </button>
+          )}
 
           {/* Screen Share Toggle */}
           <button

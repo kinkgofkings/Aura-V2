@@ -24,6 +24,7 @@ interface CallContextType {
   simulateCompanionAnswer: () => void;
   declineCall: () => void;
   endCall: () => void;
+  reconnectCall: () => Promise<boolean>;
   toggleAudio: () => void;
   toggleVideo: () => void;
   toggleScreenShare: () => Promise<void>;
@@ -32,6 +33,7 @@ interface CallContextType {
   switchCamera: (deviceId?: string) => Promise<void>;
   getVideoDevices: () => Promise<MediaDeviceInfo[]>;
   peerReachable: boolean | null;
+  connectionQuality: 'excellent' | 'good' | 'reconnecting' | 'failed' | null;
 }
 
 const CallContext = createContext<CallContextType | undefined>(undefined);
@@ -50,6 +52,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [callDuration, setCallDuration] = useState<number>(0);
   const [isPipMode, setIsPipMode] = useState<boolean>(false);
   const [peerReachable, setPeerReachable] = useState<boolean | null>(null);
+  const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'reconnecting' | 'failed' | null>(null);
 
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const durationTimerRef = useRef<any>(null);
@@ -57,9 +60,21 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const activeCallPollRef = useRef<any>(null);
   const callTimeoutRef = useRef<any>(null);
   const lastNotifiedCallRoomIdRef = useRef<string | null>(null);
+  const recentlyEndedRoomIdsRef = useRef<Set<string>>(new Set());
   const answerCallRef = useRef<(withVideo?: boolean) => Promise<void>>(async () => {});
   const declineCallRef = useRef<() => void>(() => {});
   const userIdRef = useRef<string | null>(null);
+
+  // Helper to mark a room ended locally so lingering pulses/polls are ignored
+  const markRoomEnded = useCallback((roomId?: string | null) => {
+    if (!roomId) return;
+    recentlyEndedRoomIdsRef.current.add(roomId);
+    soundEffects.stopRingtone();
+    callKitService.endCall(roomId);
+    setTimeout(() => {
+      recentlyEndedRoomIdsRef.current.delete(roomId);
+    }, 90000);
+  }, []);
 
   // Initialize WebRTC instance
   useEffect(() => {
@@ -69,6 +84,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
       onRemoteStream: (stream) => {
         setRemoteStream(stream);
+      },
+      onConnectionQuality: (quality) => {
+        setConnectionQuality(quality);
       },
       onCallEnded: () => {
         handleCallTermination();
@@ -158,13 +176,24 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      if (event.data?.type === 'CALL_NOTIFICATION_DISMISSED' && event.data?.roomId) {
+        markRoomEnded(event.data.roomId);
+        if (incomingCallRef.current?.roomId === event.data.roomId) {
+          declineCall();
+        }
+        return;
+      }
+
       if (event.data?.type === 'PUSH_INCOMING_CALL' && event.data?.payload) {
         const payload = event.data.payload;
+        if (payload.roomId && recentlyEndedRoomIdsRef.current.has(payload.roomId)) {
+          return;
+        }
         if (payload.roomId && (!activeCallRef.current || activeCallRef.current.status === 'idle')) {
           fetch(`/api/calls/${encodeURIComponent(payload.roomId)}`)
             .then((r) => r.json())
             .then((session: CallSession) => {
-              if (session && session.status === 'calling' && incomingCallRef.current?.roomId !== session.roomId) {
+              if (session && session.status === 'calling' && !recentlyEndedRoomIdsRef.current.has(session.roomId) && incomingCallRef.current?.roomId !== session.roomId) {
                 setIncomingCall(session);
                 soundEffects.startRingtone();
                 callKitService.showIncomingCall(session.roomId, session.callerName, session.callerAvatar, session.isVideo);
@@ -179,7 +208,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleSwMessage);
     };
-  }, []);
+  }, [markRoomEnded]);
 
   // Ensure push subscription is up-to-date for calling on this device
   useEffect(() => {
@@ -194,6 +223,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const presentIncoming = (session: CallSession) => {
       if (!session || session.status !== 'calling') return;
+      if (recentlyEndedRoomIdsRef.current.has(session.roomId)) return;
       if (session.receiverId !== user.id) return;
       if (activeCallRef.current && activeCallRef.current.status !== 'idle') return;
       if (incomingCallRef.current?.roomId === session.roomId) return;
@@ -231,6 +261,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setActiveCall(session);
           startDurationTimer();
         } else if (session.status === 'ended' || session.status === 'declined') {
+          markRoomEnded(session.roomId);
           soundEffects.stopRingtone();
           soundEffects.playCallEnded();
           handleCallTermination();
@@ -240,6 +271,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         incomingCallRef.current?.roomId === session.roomId &&
         (session.status === 'ended' || session.status === 'declined' || session.status === 'connected')
       ) {
+        markRoomEnded(session.roomId);
         soundEffects.stopRingtone();
         callKitService.endCall(session.roomId);
         setIncomingCall(null);
@@ -318,7 +350,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkDeepLinkCall();
   }, [user?.id]);
 
-  // Periodic polling for incoming calls on server (every 1.5 seconds)
+  // Periodic polling for incoming calls on server (every 5 seconds)
   useEffect(() => {
     if (!user) return;
     
@@ -334,6 +366,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const pendingCalls: CallSession[] = await res.json();
           if (pendingCalls.length > 0) {
             const first = pendingCalls[0];
+            if (recentlyEndedRoomIdsRef.current.has(first.roomId)) {
+              return;
+            }
             if (!incomingCall || incomingCall.roomId !== first.roomId) {
               if (activeCallRef.current) return; // double check before ringing
               
@@ -355,7 +390,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           } else if (incomingCall) {
             // Pending call was cancelled or answered elsewhere
-            callKitService.endCall(incomingCall.roomId);
+            markRoomEnded(incomingCall.roomId);
             setIncomingCall(null);
             soundEffects.stopRingtone();
             lastNotifiedCallRoomIdRef.current = null;
@@ -375,7 +410,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearInterval(callPollIntervalRef.current);
       }
     };
-  }, [user, incomingCall]);
+  }, [user, incomingCall, markRoomEnded]);
 
   // Poll active call status from server so caller immediately transitions when receiver answers
   useEffect(() => {
@@ -479,16 +514,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       stopDurationTimer();
       soundEffects.stopRingtone();
       if (activeCallRef.current?.roomId) {
-        callKitService.endCall(activeCallRef.current.roomId);
+        markRoomEnded(activeCallRef.current.roomId);
       }
       if (incomingCallRef.current?.roomId) {
-        callKitService.endCall(incomingCallRef.current.roomId);
+        markRoomEnded(incomingCallRef.current.roomId);
       }
       setActiveCall(null);
       setIncomingCall(null);
       setPeerReachable(null);
       setLocalStream(null);
       setRemoteStream(null);
+      setConnectionQuality(null);
       setIsPipMode(false);
       setIsScreenSharing(false);
       setIsAudioMuted(false);
@@ -659,11 +695,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Decline Incoming Call
   const declineCall = () => {
     if (!incomingCall) return;
+    const roomId = incomingCall.roomId;
+    markRoomEnded(roomId);
     soundEffects.stopRingtone();
     soundEffects.playCallEnded();
 
-    const roomId = incomingCall.roomId;
-    callKitService.endCall(roomId);
     setIncomingCall(null);
 
     // Update status on server
@@ -689,6 +725,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     soundEffects.playCallEnded();
 
     if (activeCall) {
+      markRoomEnded(activeCall.roomId);
       fetch(`/api/calls/${activeCall.roomId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -704,6 +741,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     handleCallTermination();
   };
+
+  // Reconnect active WebRTC connection on mobile handover / road reconnection
+  const reconnectCall = useCallback(async (): Promise<boolean> => {
+    if (webrtcRef.current && activeCallRef.current?.status === 'connected') {
+      setConnectionQuality('reconnecting');
+      return await webrtcRef.current.restartIce();
+    }
+    return false;
+  }, []);
 
   const toggleAudio = () => {
     if (webrtcRef.current) {
@@ -772,6 +818,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         simulateCompanionAnswer,
         declineCall,
         endCall,
+        reconnectCall,
         toggleAudio,
         toggleVideo,
         toggleScreenShare,
@@ -780,6 +827,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         switchCamera,
         getVideoDevices,
         peerReachable,
+        connectionQuality,
       }}
     >
       {children}

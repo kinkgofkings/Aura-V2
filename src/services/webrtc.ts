@@ -5,6 +5,8 @@ export interface WebRTCConfig {
   onRemoteStream?: (stream: MediaStream) => void;
   onCallEnded?: () => void;
   onConnectionState?: (state: RTCPeerConnectionState) => void;
+  onIceConnectionState?: (state: RTCIceConnectionState) => void;
+  onConnectionQuality?: (quality: 'excellent' | 'good' | 'reconnecting' | 'failed') => void;
   onError?: (err: Error) => void;
 }
 
@@ -27,12 +29,18 @@ export class WebRTCManager {
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private seenSignalIds = new Set<string>();
   private isMakingOffer: boolean = false;
+  private isPolite: boolean = true;
+  private isInitiator: boolean = false;
+  private isRestartingIce: boolean = false;
+  private iceDisconnectTimer: any = null;
   private isSpeakerphoneOn: boolean = true;
   private peerAnimFrameId: number | null = null;
   private peerAudioCtx: AudioContext | null = null;
   private currentFacingMode: 'user' | 'environment' = 'user';
   private currentDeviceId: string | null = null;
   private availableVideoDevices: MediaDeviceInfo[] = [];
+  private signalRetryQueue: Array<{ type: 'offer' | 'answer' | 'candidate'; data: any; retries: number }> = [];
+  private isFlushingQueue: boolean = false;
 
   constructor(config: WebRTCConfig = {}) {
     this.config = config;
@@ -56,7 +64,7 @@ export class WebRTCManager {
     this.currentUserId = userId;
   }
 
-  // Get local user media (Camera + Mic) with hardware auto-fallback
+  // Get local user media (Camera + Mic) with bandwidth-efficient HD constraints for mobile stability
   public async getLocalMedia(video: boolean = true, audio: boolean = true): Promise<MediaStream> {
     try {
       if (this.localStream) {
@@ -68,10 +76,10 @@ export class WebRTCManager {
           this.localStream = await navigator.mediaDevices.getUserMedia({
             video: video
               ? {
-                  width: { ideal: 1280, max: 1920 },
-                  height: { ideal: 720, max: 1080 },
+                  width: { ideal: 1280, max: 1280 },
+                  height: { ideal: 720, max: 720 },
                   facingMode: 'user',
-                  frameRate: { ideal: 30, max: 60 },
+                  frameRate: { ideal: 30, max: 30 },
                 }
               : false,
             audio: audio
@@ -79,6 +87,8 @@ export class WebRTCManager {
                   echoCancellation: true,
                   noiseSuppression: true,
                   autoGainControl: true,
+                  channelCount: 1,
+                  sampleRate: 48000,
                 }
               : false,
           });
@@ -482,9 +492,17 @@ export class WebRTCManager {
   public async createPeerConnection(roomId: string, userId: string, isInitiator: boolean = false) {
     this.currentRoomId = roomId;
     this.currentUserId = userId;
+    this.isInitiator = isInitiator;
+    this.isPolite = !isInitiator;
     this.pendingCandidates = [];
     this.seenSignalIds.clear();
     this.lastSignalTimestamp = 0;
+    this.signalRetryQueue = [];
+
+    if (this.iceDisconnectTimer) {
+      clearTimeout(this.iceDisconnectTimer);
+      this.iceDisconnectTimer = null;
+    }
 
     // Reset previous connection if any
     if (this.peerConnection) {
@@ -509,6 +527,7 @@ export class WebRTCManager {
           this.peerConnection.addTrack(track, this.localStream);
         }
       });
+      this.applySenderBitrates();
     }
 
     // Remote track listener
@@ -537,6 +556,46 @@ export class WebRTCManager {
       }
     };
 
+    // Monitor ICE connection state changes (essential for mobile 4G/5G handovers & road travel)
+    this.peerConnection.oniceconnectionstatechange = () => {
+      const iceState = this.peerConnection?.iceConnectionState;
+      if (!iceState) return;
+
+      if (this.config.onIceConnectionState) {
+        this.config.onIceConnectionState(iceState);
+      }
+
+      if (iceState === 'connected' || iceState === 'completed') {
+        if (this.iceDisconnectTimer) {
+          clearTimeout(this.iceDisconnectTimer);
+          this.iceDisconnectTimer = null;
+        }
+        if (this.config.onConnectionQuality) {
+          this.config.onConnectionQuality('excellent');
+        }
+      } else if (iceState === 'disconnected') {
+        if (this.config.onConnectionQuality) {
+          this.config.onConnectionQuality('reconnecting');
+        }
+        // Give cellular connection a 3-second grace period to switch tower or reconnect
+        if (!this.iceDisconnectTimer) {
+          this.iceDisconnectTimer = setTimeout(() => {
+            this.iceDisconnectTimer = null;
+            if (this.peerConnection?.iceConnectionState === 'disconnected') {
+              console.warn('WebRTC ICE disconnected for 3s, initiating automatic ICE restart...');
+              this.restartIce();
+            }
+          }, 3000);
+        }
+      } else if (iceState === 'failed') {
+        if (this.config.onConnectionQuality) {
+          this.config.onConnectionQuality('failed');
+        }
+        console.warn('WebRTC ICE state failed, attempting immediate ICE restart...');
+        this.restartIce();
+      }
+    };
+
     // Connection state monitor
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection?.connectionState;
@@ -544,17 +603,15 @@ export class WebRTCManager {
         this.config.onConnectionState(state);
       }
       if (state === 'failed') {
-        console.warn('WebRTC connection failed, attempting ICE restart...');
-        if (isInitiator && this.peerConnection) {
-          this.peerConnection.restartIce();
-        }
+        console.warn('WebRTC connection failed, initiating ICE restart...');
+        this.restartIce();
       }
     };
 
     // Start Server Signaling Polling
     this.startSignalingPolling();
 
-    // If initiator, create and send SDP offer
+    // If initiator, create and send SDP offer with Opus mobile audio enhancements
     if (isInitiator) {
       try {
         this.isMakingOffer = true;
@@ -562,7 +619,9 @@ export class WebRTCManager {
           offerToReceiveAudio: true,
           offerToReceiveVideo: true,
         });
+        offer.sdp = this.optimizeSdp(offer.sdp || '');
         await this.peerConnection.setLocalDescription(offer);
+        this.applySenderBitrates();
         await this.sendSignal('offer', offer);
       } catch (err: any) {
         console.error('Error creating WebRTC offer:', err);
@@ -572,7 +631,69 @@ export class WebRTCManager {
     }
   }
 
-  // Send signaling message via Server API & BroadcastChannel
+  // Optimize SDP with Opus In-band Forward Error Correction (FEC) & Discontinuous Transmission (DTX)
+  // This makes audio resilient against 10-20% packet drops during mobile driving/travel
+  private optimizeSdp(sdp: string): string {
+    if (!sdp) return sdp;
+    return sdp
+      .replace(/a=fmtp:(\d+) minptime=10/g, 'a=fmtp:$1 minptime=10;useinbandfec=1;dtx=1;maxaveragebitrate=64000')
+      .replace(/(a=rtpmap:(\d+) opus\/48000\/2[\r\n]+)/g, '$1a=fmtp:$2 useinbandfec=1;dtx=1;maxaveragebitrate=64000\r\n');
+  }
+
+  // Set balanced bitrates on video/audio senders to prevent cell data bufferbloat
+  private applySenderBitrates() {
+    if (!this.peerConnection) return;
+    try {
+      this.peerConnection.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'video') {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          params.encodings[0].maxBitrate = 1400000; // 1.4 Mbps max for 720p HD
+          sender.setParameters(params).catch(() => {});
+        } else if (sender.track && sender.track.kind === 'audio') {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          params.encodings[0].maxBitrate = 64000; // 64kbps Opus
+          sender.setParameters(params).catch(() => {});
+        }
+      });
+    } catch (e) {}
+  }
+
+  // Trigger full ICE Restart to recover frozen or dropped calls
+  public async restartIce(): Promise<boolean> {
+    if (!this.peerConnection || this.isRestartingIce) return false;
+    this.isRestartingIce = true;
+    try {
+      console.log('Initiating WebRTC ICE restart for room', this.currentRoomId);
+      if (typeof this.peerConnection.restartIce === 'function') {
+        this.peerConnection.restartIce();
+      }
+      this.isMakingOffer = true;
+      const offer = await this.peerConnection.createOffer({
+        iceRestart: true,
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+      offer.sdp = this.optimizeSdp(offer.sdp || '');
+      await this.peerConnection.setLocalDescription(offer);
+      this.applySenderBitrates();
+      await this.sendSignal('offer', offer);
+      return true;
+    } catch (err) {
+      console.warn('ICE restart offer failed:', err);
+      return false;
+    } finally {
+      this.isRestartingIce = false;
+      this.isMakingOffer = false;
+    }
+  }
+
+  // Send signaling message via Server API & BroadcastChannel with retry queue
   private async sendSignal(type: 'offer' | 'answer' | 'candidate', data: any) {
     if (!this.currentRoomId || !this.currentUserId) return;
 
@@ -591,7 +712,7 @@ export class WebRTCManager {
 
     // Post to Server Signaling Endpoint
     try {
-      await fetch(`/api/calls/${this.currentRoomId}/signal`, {
+      const res = await fetch(`/api/calls/${this.currentRoomId}/signal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -600,8 +721,49 @@ export class WebRTCManager {
           data,
         }),
       });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
     } catch (err) {
-      console.warn('Failed to send call signal to server:', err);
+      console.warn('Failed to send call signal to server, queuing for retry:', err);
+      this.signalRetryQueue.push({ type, data, retries: 0 });
+      this.flushSignalQueue();
+    }
+  }
+
+  // Flush queued signals on temporary cellular reconnect
+  private async flushSignalQueue() {
+    if (this.isFlushingQueue || this.signalRetryQueue.length === 0 || !this.currentRoomId || !this.currentUserId) return;
+    this.isFlushingQueue = true;
+
+    try {
+      while (this.signalRetryQueue.length > 0 && this.currentRoomId) {
+        const item = this.signalRetryQueue[0];
+        try {
+          const res = await fetch(`/api/calls/${this.currentRoomId}/signal`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderId: this.currentUserId,
+              type: item.type,
+              data: item.data,
+            }),
+          });
+          if (res.ok) {
+            this.signalRetryQueue.shift();
+          } else {
+            item.retries++;
+            if (item.retries > 5) this.signalRetryQueue.shift();
+            break;
+          }
+        } catch {
+          item.retries++;
+          if (item.retries > 5) this.signalRetryQueue.shift();
+          break;
+        }
+      }
+    } finally {
+      this.isFlushingQueue = false;
     }
   }
 
@@ -645,7 +807,7 @@ export class WebRTCManager {
     }, 450);
   }
 
-  // Handle incoming SDP Offer, SDP Answer, or ICE Candidate
+  // Handle incoming SDP Offer, SDP Answer, or ICE Candidate with Perfect Negotiation
   private async handleIncomingSignal(signal: { roomId: string; senderId: string; type: string; data: any }) {
     if (!signal || signal.roomId !== this.currentRoomId || signal.senderId === this.currentUserId) {
       return;
@@ -655,11 +817,18 @@ export class WebRTCManager {
 
     try {
       if (signal.type === 'offer') {
-        // If we are also making an offer (glare collision), resolve
         const offerCollision = this.isMakingOffer || this.peerConnection.signalingState !== 'stable';
         if (offerCollision) {
-          console.warn('WebRTC offer collision detected');
-          return;
+          if (!this.isPolite) {
+            console.log('WebRTC glare: impolite peer ignoring remote offer');
+            return;
+          }
+          console.log('WebRTC glare: polite peer rolling back local offer');
+          try {
+            await this.peerConnection.setLocalDescription({ type: 'rollback' });
+          } catch (e) {
+            console.warn('Rollback failed:', e);
+          }
         }
 
         await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signal.data));
@@ -667,13 +836,16 @@ export class WebRTCManager {
         await this.drainPendingCandidates();
 
         const answer = await this.peerConnection.createAnswer();
+        answer.sdp = this.optimizeSdp(answer.sdp || '');
         await this.peerConnection.setLocalDescription(answer);
+        this.applySenderBitrates();
         await this.sendSignal('answer', answer);
       } else if (signal.type === 'answer') {
         if (this.peerConnection.signalingState === 'have-local-offer') {
           await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signal.data));
           // Drain pending candidates
           await this.drainPendingCandidates();
+          this.applySenderBitrates();
         }
       } else if (signal.type === 'candidate' && signal.data) {
         if (this.peerConnection.remoteDescription && this.peerConnection.remoteDescription.type) {
@@ -712,6 +884,11 @@ export class WebRTCManager {
     this.isEndingCall = true;
 
     try {
+      if (this.iceDisconnectTimer) {
+        clearTimeout(this.iceDisconnectTimer);
+        this.iceDisconnectTimer = null;
+      }
+
       if (this.pollingInterval) {
         clearInterval(this.pollingInterval);
         this.pollingInterval = null;
@@ -750,6 +927,7 @@ export class WebRTCManager {
       this.currentRoomId = null;
       this.isScreenSharing = false;
       this.pendingCandidates = [];
+      this.signalRetryQueue = [];
 
       if (broadcast && hadActiveSession && this.config.onCallEnded) {
         this.config.onCallEnded();

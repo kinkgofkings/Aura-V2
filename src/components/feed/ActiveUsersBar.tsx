@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Radio, Phone, MessageSquare, Sparkles } from 'lucide-react';
+import { Radio, Phone, Video, MessageSquare, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCall } from '../../context/CallContext';
 import { useChat } from '../../context/ChatContext';
@@ -126,7 +126,7 @@ export const ActiveUsersBar: React.FC<ActiveUsersBarProps> = ({ onOpenProfile })
               </p>
             </div>
 
-            {/* Quick Actions (Call & Chat) */}
+            {/* Quick Actions (Chat, Voice Call, Video Call) */}
             <div className="flex items-center gap-1 border-l border-white/10 pl-1.5">
               <button
                 type="button"
@@ -139,11 +139,20 @@ export const ActiveUsersBar: React.FC<ActiveUsersBarProps> = ({ onOpenProfile })
 
               <button
                 type="button"
-                onClick={() => handleStartCallWith(u, true)}
-                className="p-1.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-white transition-all shadow-sm border border-emerald-500/30"
-                title={`Start video call with ${u.name}`}
+                onClick={() => handleStartCallWith(u, false)}
+                className="p-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black transition-all shadow-sm border border-amber-500/30"
+                title={`Start voice call with ${u.name}`}
               >
                 <Phone className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleStartCallWith(u, true)}
+                className="p-1.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-500 text-emerald-300 hover:text-white transition-all shadow-sm border border-emerald-500/30"
+                title={`Start HD video call with ${u.name}`}
+              >
+                <Video className="w-3.5 h-3.5" />
               </button>
             </div>
           </motion.div>

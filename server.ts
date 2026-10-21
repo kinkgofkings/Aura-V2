@@ -3,8 +3,10 @@ import { getLiveMinistryFeed } from "./services/youtubeFeedService";
 import { performUnifiedImageSearch } from "./services/imageSearchService";
 import webpush from "web-push";
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { db } from './server/db';
+import { attachRealtime, pushToUser } from './server/realtime';
 import { createBibleRoutes } from './routes/bible';
 import { BibleStudyDB } from './server/bible/models';
 import { initializeBibleDB } from './server/bible/init';
@@ -1168,6 +1170,12 @@ async function startServer() {
       activeRingTimers.delete(roomId);
     }
 
+    // IMMEDIATELY SEND REALTIME WEBSOCKET EVENT TO RECEIVER
+    pushToUser(receiverId, {
+      type: 'call:incoming',
+      session,
+    });
+
     // IMMEDIATELY SEND REAL HIGH-PRIORITY PUSH TO RECEIVER'S DEVICE
     const pushPayload = {
       type: 'CALL_INCOMING',
@@ -1229,18 +1237,24 @@ async function startServer() {
     const session = db.updateCallStatus(req.params.roomId, status);
     if (!session) return res.status(404).json({ error: 'Call session not found' });
 
+    // Push realtime status event to both caller and receiver
+    pushToUser(session.callerId, { type: 'call:status', session });
+    pushToUser(session.receiverId, { type: 'call:status', session });
+
     // If call completed, declined or missed, optionally log in direct conversation
     if (status === 'ended' || status === 'declined') {
       const isMissed = !session.startedAt || session.status === 'calling';
-      // Notify receiver to close incoming ringing push notification
-      sendPushToUser(session.receiverId, {
+      // Notify both parties to close incoming ringing push notification and stop vibration
+      const cancelPayload = {
         type: 'CALL_CANCELLED',
         action: 'call_cancelled',
         roomId: req.params.roomId,
         callerName: session.callerName,
         callerAvatar: session.callerAvatar,
         isMissed: isMissed && status !== 'declined',
-      });
+      };
+      sendPushToUser(session.receiverId, cancelPayload);
+      sendPushToUser(session.callerId, cancelPayload);
 
       // If receiver declined, notify caller
       if (status === 'declined') {
@@ -1292,6 +1306,18 @@ async function startServer() {
       return res.status(400).json({ error: 'senderId, type, and data are required' });
     }
     const signal = db.addCallSignal(req.params.roomId, senderId, type, data);
+
+    // Instant WebSocket dispatch to peer to avoid polling delay
+    const session = db.getCallSessionByRoomId(req.params.roomId);
+    if (session) {
+      const targetId = senderId === session.callerId ? session.receiverId : session.callerId;
+      pushToUser(targetId, {
+        type: 'call:signal',
+        signal,
+        roomId: req.params.roomId,
+      });
+    }
+
     res.status(201).json(signal);
   });
 
@@ -1300,6 +1326,27 @@ async function startServer() {
     const since = req.query.since ? parseInt(req.query.since as string, 10) : 0;
     const signals = db.getCallSignals(req.params.roomId, excludeSenderId, since);
     res.json(signals);
+  });
+
+  // Dedicated WebRTC ICE Servers Endpoint with STUN & TURN
+  app.get('/api/webrtc/ice', (_req, res) => {
+    res.json({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp',
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject',
+        },
+      ],
+    });
   });
 
   // --- Image Search Proxy (Pexels + Live Creative Commons + Curated Library) ---
@@ -1716,7 +1763,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = http.createServer(app);
+  attachRealtime(httpServer);
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Aura Server running on http://localhost:${PORT}`);
 
     // If local database has 0 posts, auto-sync from live production app in background

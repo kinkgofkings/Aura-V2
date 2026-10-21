@@ -1367,6 +1367,10 @@ class JSONDatabase {
     }
     if (status === 'ended' || status === 'declined') {
       session.endedAt = Date.now();
+      // Clean up signals for this room after 2 minutes
+      setTimeout(() => {
+        this.callSignals = this.callSignals.filter((s) => s.roomId !== roomId);
+      }, 120000);
     }
 
     this.activeCalls.set(roomId, session);
@@ -1375,7 +1379,7 @@ class JSONDatabase {
 
   public addCallSignal(roomId: string, senderId: string, type: 'offer' | 'answer' | 'candidate', data: any): DBCallSignal {
     const signal: DBCallSignal = {
-      id: `sig_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: `sig_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`,
       roomId,
       senderId,
       type,
@@ -1384,16 +1388,18 @@ class JSONDatabase {
     };
 
     this.callSignals.push(signal);
-    // Keep max 200 signals in memory
-    if (this.callSignals.length > 200) {
-      this.callSignals.splice(0, this.callSignals.length - 200);
+    // Keep max 1000 signals in memory
+    if (this.callSignals.length > 1000) {
+      this.callSignals.splice(0, this.callSignals.length - 1000);
     }
     return signal;
   }
 
   public getCallSignals(roomId: string, excludeSenderId?: string, sinceTimestamp: number = 0): DBCallSignal[] {
+    // If sinceTimestamp is provided, use a 2000ms overlap window so no simultaneous candidates are dropped
+    const threshold = sinceTimestamp > 0 ? Math.max(0, sinceTimestamp - 2000) : 0;
     return this.callSignals.filter(
-      (s) => s.roomId === roomId && (!excludeSenderId || s.senderId !== excludeSenderId) && s.timestamp > sinceTimestamp
+      (s) => s.roomId === roomId && (!excludeSenderId || s.senderId !== excludeSenderId) && s.timestamp >= threshold
     );
   }
 

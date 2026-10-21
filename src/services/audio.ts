@@ -2,7 +2,6 @@
 
 class SoundEffectsService {
   private ctx: AudioContext | null = null;
-  private ringtoneInterval: any = null;
 
   private initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
@@ -124,22 +123,36 @@ class SoundEffectsService {
     this.playMarioCoin();
   }
 
+  private isPlayingRingtone = false;
+  private ringtoneInterval: any = null;
+  private ringtoneMasterGain: GainNode | null = null;
+  private ringtoneOscillators: OscillatorNode[] = [];
+
   // Start iconic Super Mario Bros Ringtone Loop & phone vibration
   public startRingtone() {
     this.stopRingtone();
+    this.isPlayingRingtone = true;
 
     const playMarioRingtoneCycle = () => {
+      if (!this.isPlayingRingtone) return;
       try {
         this.initCtx();
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
 
-        // Vibrate physical phone on Android / mobile devices (Motorola Razr)
+        // Vibrate physical phone on Android / mobile devices
         if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
           try {
             navigator.vibrate([180, 80, 180, 80, 280, 100, 350]);
           } catch {}
         }
+
+        // Dedicated master gain node for instant clean cutoff
+        if (!this.ringtoneMasterGain) {
+          this.ringtoneMasterGain = this.ctx.createGain();
+          this.ringtoneMasterGain.connect(this.ctx.destination);
+        }
+        this.ringtoneMasterGain.gain.setValueAtTime(1, now);
 
         // Mario Overworld Theme Intro Melody:
         // E5, E5, rest, E5, rest, C5, E5, rest, G5, rest, G4
@@ -154,7 +167,7 @@ class SoundEffectsService {
         ];
 
         melody.forEach(({ note, start, dur }) => {
-          if (!this.ctx) return;
+          if (!this.ctx || !this.isPlayingRingtone || !this.ringtoneMasterGain) return;
           const osc = this.ctx.createOscillator();
           const gain = this.ctx.createGain();
 
@@ -167,10 +180,16 @@ class SoundEffectsService {
           gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
 
           osc.connect(gain);
-          gain.connect(this.ctx.destination);
+          gain.connect(this.ringtoneMasterGain);
 
           osc.start(now + start);
           osc.stop(now + start + dur);
+
+          this.ringtoneOscillators.push(osc);
+          osc.onended = () => {
+            const idx = this.ringtoneOscillators.indexOf(osc);
+            if (idx !== -1) this.ringtoneOscillators.splice(idx, 1);
+          };
         });
       } catch (e) {
         console.warn('Super Mario ringtone error:', e);
@@ -178,16 +197,42 @@ class SoundEffectsService {
     };
 
     playMarioRingtoneCycle();
-    this.ringtoneInterval = setInterval(playMarioRingtoneCycle, 2800);
+    this.ringtoneInterval = setInterval(() => {
+      if (this.isPlayingRingtone) {
+        playMarioRingtoneCycle();
+      } else {
+        this.stopRingtone();
+      }
+    }, 2800);
   }
 
   public stopRingtone() {
-    const wasRinging = !!this.ringtoneInterval;
+    this.isPlayingRingtone = false;
     if (this.ringtoneInterval) {
       clearInterval(this.ringtoneInterval);
       this.ringtoneInterval = null;
     }
-    if (wasRinging && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    // Instantly zero and disconnect master gain
+    if (this.ringtoneMasterGain) {
+      try {
+        if (this.ctx) {
+          this.ringtoneMasterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        }
+        this.ringtoneMasterGain.disconnect();
+      } catch {}
+      this.ringtoneMasterGain = null;
+    }
+    // Instantly terminate all active/scheduled oscillators
+    while (this.ringtoneOscillators.length > 0) {
+      const osc = this.ringtoneOscillators.pop();
+      if (osc) {
+        try {
+          osc.stop();
+          osc.disconnect();
+        } catch {}
+      }
+    }
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
         navigator.vibrate(0);
       } catch {}
