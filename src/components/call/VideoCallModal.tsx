@@ -68,11 +68,13 @@ export const VideoCallModal: React.FC = () => {
     reconnectCall,
     connectionQuality,
     peerReachable,
+    facingMode,
   } = useCall();
 
   // View state controls
   const [activeCard, setActiveCard] = useState<string>(CALLING_CARDS[0]);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeCall?.roomId || activeCall?.id) {
@@ -89,6 +91,9 @@ export const VideoCallModal: React.FC = () => {
   const [isMirrored, setIsMirrored] = useState(true);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
+
+  // Only mirror video when using the selfie / front camera, never mirror the outward rear camera
+  const shouldMirrorSelf = isMirrored && facingMode === 'user' && !isScreenSharing;
 
   // Dedicated video element references
   const mainStageVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -191,11 +196,20 @@ export const VideoCallModal: React.FC = () => {
   const handleCameraFlip = async () => {
     setIsSwitchingCamera(true);
     try {
-      await switchCamera();
+      const res = await switchCamera();
+      const currentMode = res?.facingMode || (facingMode === 'user' ? 'environment' : 'user');
+      setCameraNotice(
+        currentMode === 'environment'
+          ? 'Rear Camera Active — Showing your surroundings to Kimmie'
+          : 'Front Camera Active — Selfie mode'
+      );
+      setTimeout(() => setCameraNotice(null), 3000);
       const devices = await getVideoDevices();
       setAvailableCameras(devices);
+    } catch (e) {
+      console.warn('Camera switch error:', e);
     } finally {
-      setTimeout(() => setIsSwitchingCamera(false), 600);
+      setTimeout(() => setIsSwitchingCamera(false), 500);
     }
   };
 
@@ -235,7 +249,7 @@ export const VideoCallModal: React.FC = () => {
               autoPlay
               playsInline
               muted={true}
-              className="w-full h-full object-cover object-center scale-x-[-1]"
+              className={`w-full h-full object-cover object-center ${shouldMirrorSelf ? 'scale-x-[-1]' : ''}`}
             />
           </div>
 
@@ -382,6 +396,21 @@ export const VideoCallModal: React.FC = () => {
           ref={stageBoundsRef}
           className="relative flex-1 w-full bg-gradient-to-b from-[#060814] to-[#0d1326] p-2 sm:p-4 md:p-5 flex items-center justify-center overflow-hidden min-h-0"
         >
+          {/* Active Camera Mode Floating Toast */}
+          <AnimatePresence>
+            {cameraNotice && (
+              <motion.div
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                className="absolute top-4 sm:top-6 z-50 px-4 py-2 rounded-2xl bg-black/90 text-amber-300 border border-amber-400/50 backdrop-blur-xl shadow-2xl text-xs font-semibold flex items-center gap-2 pointer-events-none"
+              >
+                <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                <span>{cameraNotice}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* ================= LAYOUT 1: SPOTLIGHT MODE (Google Meet Standard) ================= */}
           {layoutMode === 'spotlight' && (
             <div className="relative w-full h-full rounded-2xl sm:rounded-3xl overflow-hidden bg-black/80 border border-white/10 flex items-center justify-center shadow-2xl">
@@ -396,7 +425,7 @@ export const VideoCallModal: React.FC = () => {
                     videoFitMode === 'cover' ? 'object-cover' : 'object-contain bg-black'
                   } object-center transition-all`}
                   style={{
-                    transform: isViewSwapped && isMirrored && !isScreenSharing ? 'scaleX(-1)' : 'none',
+                    transform: isViewSwapped && shouldMirrorSelf ? 'scaleX(-1)' : 'none',
                   }}
                 />
               ) : (
@@ -502,7 +531,7 @@ export const VideoCallModal: React.FC = () => {
                           isVideoMuted && !isViewSwapped ? 'hidden' : 'block'
                         }`}
                         style={{
-                          transform: !isViewSwapped && isMirrored && !isScreenSharing ? 'scaleX(-1)' : 'none',
+                          transform: !isViewSwapped && shouldMirrorSelf ? 'scaleX(-1)' : 'none',
                         }}
                       />
 
@@ -539,13 +568,15 @@ export const VideoCallModal: React.FC = () => {
                           {selfViewSize === 'normal' ? <Maximize className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
                         </button>
 
-                        {/* Camera Switcher */}
+                        {/* Camera Switcher (Flip Front / Back) */}
                         <button
                           onClick={handleCameraFlip}
-                          title="Switch / Flip Camera"
-                          className={`p-1 rounded-lg hover:bg-white/20 text-white transition-colors ${
-                            isSwitchingCamera ? 'animate-spin text-amber-400' : ''
-                          }`}
+                          title={facingMode === 'environment' ? 'Switch back to Front Camera' : 'Flip to Rear Camera'}
+                          className={`p-1 rounded-lg hover:bg-white/20 transition-colors ${
+                            facingMode === 'environment'
+                              ? 'text-amber-300 bg-amber-500/20 ring-1 ring-amber-400/50'
+                              : 'text-white'
+                          } ${isSwitchingCamera ? 'animate-spin text-amber-400' : ''}`}
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
                         </button>
@@ -563,6 +594,11 @@ export const VideoCallModal: React.FC = () => {
                       {/* Participant Label & Mic Status */}
                       <div className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[10px] text-white font-medium flex items-center gap-1.5 border border-white/10">
                         <span>{selfTileParticipantName}</span>
+                        {facingMode === 'environment' && (
+                          <span className="px-1 py-0.2 rounded bg-amber-400 text-black font-extrabold text-[8px] uppercase tracking-wider">
+                            Rear Cam
+                          </span>
+                        )}
                         {!isViewSwapped && isAudioMuted && <MicOff className="w-3 h-3 text-rose-400" />}
                       </div>
                     </motion.div>
@@ -619,7 +655,7 @@ export const VideoCallModal: React.FC = () => {
                   playsInline
                   muted
                   className={`w-full h-full object-cover object-center ${isVideoMuted ? 'hidden' : 'block'}`}
-                  style={{ transform: isMirrored && !isScreenSharing ? 'scaleX(-1)' : 'none' }}
+                  style={{ transform: shouldMirrorSelf ? 'scaleX(-1)' : 'none' }}
                 />
                 {isVideoMuted && (
                   <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
@@ -630,14 +666,21 @@ export const VideoCallModal: React.FC = () => {
                 <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md text-xs font-semibold text-white flex items-center gap-2 border border-white/10">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                   <span>You</span>
+                  {facingMode === 'environment' && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-400 text-black font-extrabold text-[9px] uppercase tracking-wider">
+                      Rear Camera
+                    </span>
+                  )}
                   {isAudioMuted && <MicOff className="w-3.5 h-3.5 text-rose-400" />}
                 </div>
 
                 <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/75 backdrop-blur-md p-1 rounded-xl border border-white/10">
                   <button
                     onClick={handleCameraFlip}
-                    title="Switch / Flip Camera"
-                    className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors"
+                    title={facingMode === 'environment' ? 'Switch back to Front Camera' : 'Flip to Rear Camera'}
+                    className={`p-1.5 rounded-lg hover:bg-white/20 transition-colors ${
+                      facingMode === 'environment' ? 'text-amber-300 bg-amber-500/20' : 'text-white'
+                    }`}
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSwitchingCamera ? 'animate-spin text-amber-400' : ''}`} />
                   </button>
@@ -689,16 +732,23 @@ export const VideoCallModal: React.FC = () => {
             <button
               id="switch-camera-btn"
               onClick={handleCameraFlip}
-              className={`p-3.5 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 hover:text-white flex items-center justify-center transition-all ${
-                isSwitchingCamera ? 'ring-2 ring-amber-400' : ''
-              }`}
+              className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex items-center justify-center gap-1.5 ${
+                facingMode === 'environment'
+                  ? 'bg-amber-500/25 text-amber-300 border-amber-400/50 shadow-[0_0_15px_rgba(251,191,36,0.3)] ring-2 ring-amber-400/50'
+                  : 'bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 hover:text-white'
+              } ${isSwitchingCamera ? 'ring-2 ring-amber-400' : ''}`}
               title={
-                availableCameras.length > 1
+                facingMode === 'environment'
+                  ? 'Switch back to Front Camera (Selfie)'
+                  : availableCameras.length > 1
                   ? `Switch camera (${availableCameras.length} devices available)`
-                  : 'Flip front / back camera'
+                  : 'Flip to Rear Camera (Show surroundings)'
               }
             >
               <RefreshCw className={`w-5 h-5 ${isSwitchingCamera ? 'animate-spin text-amber-400' : ''}`} />
+              <span className="text-xs font-bold hidden sm:inline">
+                {facingMode === 'environment' ? 'Rear' : 'Flip'}
+              </span>
             </button>
           )}
 

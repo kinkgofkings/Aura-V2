@@ -374,12 +374,28 @@ export class WebRTCManager {
     }
   }
 
-  private replaceVideoTrack(newTrack: MediaStreamTrack | undefined) {
+  private async replaceVideoTrack(newTrack: MediaStreamTrack | undefined) {
     if (!newTrack || !this.peerConnection) return;
-    const senders = this.peerConnection.getSenders();
-    const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-    if (videoSender) {
-      videoSender.replaceTrack(newTrack);
+    try {
+      const senders = this.peerConnection.getSenders();
+      let videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+      if (!videoSender) {
+        const transceivers = this.peerConnection.getTransceivers ? this.peerConnection.getTransceivers() : [];
+        const videoTransceiver = transceivers.find(
+          (t) => t.receiver?.track?.kind === 'video' || (t.sender && (t.sender as any).track?.kind === 'video')
+        );
+        if (videoTransceiver) {
+          videoSender = videoTransceiver.sender;
+        }
+      }
+      if (videoSender) {
+        await videoSender.replaceTrack(newTrack);
+      } else {
+        this.peerConnection.addTrack(newTrack, this.localStream || undefined);
+      }
+      this.applySenderBitrates();
+    } catch (e) {
+      console.warn('replaceVideoTrack warning:', e);
     }
   }
 
@@ -412,6 +428,10 @@ export class WebRTCManager {
     this.isSpeakerphoneOn = enable;
   }
 
+  public getFacingMode(): 'user' | 'environment' {
+    return this.currentFacingMode;
+  }
+
   // Get available video input cameras
   public async getVideoDevices(): Promise<MediaDeviceInfo[]> {
     try {
@@ -426,66 +446,156 @@ export class WebRTCManager {
     return [];
   }
 
-  // Switch camera by deviceId or toggle facing mode (front / back / external)
-  public async switchCamera(deviceId?: string): Promise<MediaStream | null> {
+  // Switch camera between Front (user/selfie) and Back (environment/rear), or by deviceId
+  public async switchCamera(deviceId?: string): Promise<{ stream: MediaStream | null; facingMode: 'user' | 'environment' }> {
     if (this.isScreenSharing) {
-      return null;
+      return { stream: null, facingMode: this.currentFacingMode };
     }
+
+    const previousFacingMode = this.currentFacingMode;
+    const nextFacingMode: 'user' | 'environment' = previousFacingMode === 'user' ? 'environment' : 'user';
 
     try {
       const devices = await this.getVideoDevices();
-      let videoConstraints: MediaTrackConstraints = {};
 
-      if (deviceId) {
-        this.currentDeviceId = deviceId;
-        videoConstraints = { deviceId: { exact: deviceId } };
-      } else if (devices.length > 1) {
-        // Cycle to next available camera device
-        const currentIndex = devices.findIndex((d) => d.deviceId === this.currentDeviceId);
-        const nextIndex = (currentIndex + 1) % devices.length;
-        this.currentDeviceId = devices[nextIndex].deviceId;
-        videoConstraints = { deviceId: { exact: this.currentDeviceId } };
-      } else {
-        // Toggle facingMode between user and environment
-        this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-        videoConstraints = { facingMode: { ideal: this.currentFacingMode } };
+      // Determine target deviceId if available
+      let chosenDeviceId = deviceId;
+      if (!chosenDeviceId && devices.length > 1) {
+        if (nextFacingMode === 'environment') {
+          // Look for rear/back camera device
+          const rear = devices.find((d) =>
+            /back|rear|environment|world|outer|main/i.test(d.label) ||
+            /camera 1|facing back/i.test(d.label)
+          );
+          if (rear) chosenDeviceId = rear.deviceId;
+        } else {
+          // Look for front/selfie camera device
+          const front = devices.find((d) =>
+            /front|user|selfie|inner|face/i.test(d.label) ||
+            /camera 0|facing front/i.test(d.label)
+          );
+          if (front) chosenDeviceId = front.deviceId;
+        }
+
+        // If no matching label was found, cycle to next available camera device
+        if (!chosenDeviceId) {
+          const currentIndex = devices.findIndex((d) => d.deviceId === this.currentDeviceId);
+          const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % devices.length : 1;
+          chosenDeviceId = devices[nextIndex].deviceId;
+        }
       }
 
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            ...videoConstraints,
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-          },
-          audio: false,
-        });
+      // CRITICAL FOR MOBILE:
+      // Stop the existing camera track first to release the hardware sensor lock!
+      // Otherwise, Android/iOS throws NotReadableError when trying to open the second camera.
+      const oldTracks = this.localStream ? this.localStream.getVideoTracks() : [];
+      oldTracks.forEach((t) => {
+        try {
+          t.stop();
+          this.localStream?.removeTrack(t);
+        } catch {}
+      });
 
+      let newStream: MediaStream | null = null;
+
+      // Strategy 1: Target chosen device ID
+      if (chosenDeviceId) {
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              deviceId: { exact: chosenDeviceId },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+          this.currentDeviceId = chosenDeviceId;
+        } catch (devErr) {
+          console.warn('Device ID constraint failed, falling back to facingMode:', devErr);
+        }
+      }
+
+      // Strategy 2: Target facingMode exact
+      if (!newStream) {
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { exact: nextFacingMode },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+        } catch (exactErr) {
+          // Strategy 3: Target facingMode ideal (most resilient across all mobile devices)
+          try {
+            newStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: { ideal: nextFacingMode },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
+              audio: false,
+            });
+          } catch (idealErr) {
+            // Strategy 4: Fallback to basic video stream
+            newStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          }
+        }
+      }
+
+      if (newStream) {
         const newVideoTrack = newStream.getVideoTracks()[0];
         if (newVideoTrack) {
-          // Stop old video track
-          if (this.localStream) {
-            this.localStream.getVideoTracks().forEach((t) => t.stop());
-            this.localStream.removeTrack(this.localStream.getVideoTracks()[0]);
-            this.localStream.addTrack(newVideoTrack);
+          // Detect actual reported facingMode from track settings if available
+          const settings = newVideoTrack.getSettings ? newVideoTrack.getSettings() : {};
+          if (settings.facingMode === 'user' || settings.facingMode === 'environment') {
+            this.currentFacingMode = settings.facingMode;
           } else {
-            this.localStream = new MediaStream([newVideoTrack]);
+            this.currentFacingMode = nextFacingMode;
           }
 
-          // Replace track in active WebRTC connection
-          this.replaceVideoTrack(newVideoTrack);
+          if (settings.deviceId) {
+            this.currentDeviceId = settings.deviceId;
+          }
+
+          if (!this.localStream) {
+            this.localStream = new MediaStream([newVideoTrack]);
+          } else {
+            this.localStream.addTrack(newVideoTrack);
+          }
+
+          await this.replaceVideoTrack(newVideoTrack);
 
           if (this.config.onLocalStream && this.localStream) {
             this.config.onLocalStream(this.localStream);
           }
 
-          return this.localStream;
+          return { stream: this.localStream, facingMode: this.currentFacingMode };
         }
       }
     } catch (err) {
-      console.warn('Failed to switch camera:', err);
+      console.warn('Failed to switch camera, restoring default camera:', err);
+      // Attempt restore of original facing mode
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: previousFacingMode },
+          audio: false,
+        });
+        const fallbackTrack = fallbackStream.getVideoTracks()[0];
+        if (fallbackTrack && this.localStream) {
+          this.localStream.addTrack(fallbackTrack);
+          await this.replaceVideoTrack(fallbackTrack);
+          this.currentFacingMode = previousFacingMode;
+          if (this.config.onLocalStream) this.config.onLocalStream(this.localStream);
+        }
+      } catch {}
     }
-    return this.localStream;
+
+    return { stream: this.localStream, facingMode: this.currentFacingMode };
   }
 
   // Create WebRTC Peer Connection with Server + Broadcast Signaling

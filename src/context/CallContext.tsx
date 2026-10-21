@@ -30,10 +30,11 @@ interface CallContextType {
   toggleScreenShare: () => Promise<void>;
   toggleSpeaker: () => void;
   togglePipMode: () => void;
-  switchCamera: (deviceId?: string) => Promise<void>;
+  switchCamera: (deviceId?: string) => Promise<{ stream: MediaStream | null; facingMode: 'user' | 'environment' } | null>;
   getVideoDevices: () => Promise<MediaDeviceInfo[]>;
   peerReachable: boolean | null;
   connectionQuality: 'excellent' | 'good' | 'reconnecting' | 'failed' | null;
+  facingMode: 'user' | 'environment';
 }
 
 const CallContext = createContext<CallContextType | undefined>(undefined);
@@ -53,6 +54,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isPipMode, setIsPipMode] = useState<boolean>(false);
   const [peerReachable, setPeerReachable] = useState<boolean | null>(null);
   const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'reconnecting' | 'failed' | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const durationTimerRef = useRef<any>(null);
@@ -525,6 +527,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLocalStream(null);
       setRemoteStream(null);
       setConnectionQuality(null);
+      setFacingMode('user');
       setIsPipMode(false);
       setIsScreenSharing(false);
       setIsAudioMuted(false);
@@ -786,11 +789,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const switchCamera = useCallback(async (deviceId?: string) => {
     if (webrtcRef.current) {
-      const updatedStream = await webrtcRef.current.switchCamera(deviceId);
-      if (updatedStream) {
-        setLocalStream(new MediaStream(updatedStream.getTracks()));
+      const result = await webrtcRef.current.switchCamera(deviceId);
+      if (result) {
+        if (result.stream) {
+          setLocalStream(new MediaStream(result.stream.getTracks()));
+        }
+        if (result.facingMode) {
+          setFacingMode(result.facingMode);
+        }
+        return result;
       }
     }
+    return null;
   }, []);
 
   const getVideoDevices = useCallback(async (): Promise<MediaDeviceInfo[]> => {
@@ -828,6 +838,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         getVideoDevices,
         peerReachable,
         connectionQuality,
+        facingMode,
       }}
     >
       {children}
